@@ -1,0 +1,14 @@
+-- FORMA MVP P0 - Demo Seed Data
+-- Run this AFTER running the migration AND after creating auth users
+--
+-- IMPORTANT: Before running this seed, create 4 auth users in Supabase Dashboard
+-- (Authentication > Users > Add User) with these emails and password "demo1234":
+--   1. admin@forma-demo.com
+--   2. member@forma-demo.com
+--   3. vendor@forma-demo.com
+--   4. viewer@forma-demo.com
+--
+-- Then replace the UUIDs below with the actual auth.users.id values from Supabase.
+-- Or use the TypeScript seed script instead (scripts/seed.ts).
+
+-- This file serves as a reference. Use the TypeScript seed script for automated seeding.
