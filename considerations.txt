@@ -1,0 +1,5 @@
+following points to be considered?
+
+1. access management rights yet to be assigned correctly
+2. cyber security of the platform, including the docs sent in by the vendor
+3. 
