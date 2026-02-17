@@ -29,6 +29,7 @@ interface ApprovalRequest {
   entity_type: string
   spec_revision_id: string | null
   bom_revision_id: string | null
+  cad_version_id: string | null
   status: string
   requested_by: string
   requested_at: string
@@ -43,6 +44,7 @@ interface ApprovalRequest {
   }[]
   spec_revision?: { version_int: number }
   bom_revision?: { version_int: number }
+  cad_version?: { version_int: number }
 }
 
 export function ApprovalsTab({ projectId }: { projectId: string }) {
@@ -63,7 +65,8 @@ export function ApprovalsTab({ projectId }: { projectId: string }) {
           *,
           requester:app_users!approval_requests_requested_by_fkey(name),
           spec_revision:spec_revisions(version_int),
-          bom_revision:bom_revisions(version_int)
+          bom_revision:bom_revisions(version_int),
+          cad_version:cad_versions(version_int)
         `)
         .eq('project_id', projectId)
         .order('requested_at', { ascending: false })
@@ -185,7 +188,7 @@ export function ApprovalsTab({ projectId }: { projectId: string }) {
     <div className="space-y-3">
       {approvals?.length === 0 && (
         <div className="text-center py-12 text-neutral-500 text-sm">
-          No approval requests yet. Request approval from the Spec or BOM tab.
+          No approval requests yet. Request approval from the Spec, BOM, or CAD tab.
         </div>
       )}
 
@@ -193,7 +196,9 @@ export function ApprovalsTab({ projectId }: { projectId: string }) {
         const version =
           approval.entity_type === 'spec'
             ? approval.spec_revision?.version_int
-            : approval.bom_revision?.version_int
+            : approval.entity_type === 'bom'
+              ? approval.bom_revision?.version_int
+              : approval.cad_version?.version_int
 
         return (
           <Card key={approval.id} className="bg-neutral-900 border-neutral-800">

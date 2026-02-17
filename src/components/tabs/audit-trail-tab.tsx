@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   XCircle,
   Download,
+  Ruler,
+  FolderInput,
 } from 'lucide-react'
 import type { AuditAction } from '@/lib/types/database'
 
@@ -53,6 +55,21 @@ const ACTION_CONFIG: Record<
     icon: <Download className="h-4 w-4" />,
     label: 'Export generated',
     color: 'text-orange-400 bg-orange-400/10 border-orange-400/30',
+  },
+  sku_created: {
+    icon: <Ruler className="h-4 w-4" />,
+    label: 'SKU created',
+    color: 'text-indigo-400 bg-indigo-400/10 border-indigo-400/30',
+  },
+  cad_version_generated: {
+    icon: <Ruler className="h-4 w-4" />,
+    label: 'CAD version generated',
+    color: 'text-teal-400 bg-teal-400/10 border-teal-400/30',
+  },
+  cad_pushed_to_documents: {
+    icon: <FolderInput className="h-4 w-4" />,
+    label: 'CAD pushed to documents',
+    color: 'text-sky-400 bg-sky-400/10 border-sky-400/30',
   },
 }
 

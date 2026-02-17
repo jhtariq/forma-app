@@ -1,0 +1,281 @@
+# PAQD Apparel Demo
+## Product Requirements Document (PRD)
+Version: 1.1
+Date: 2026-02-16
+Scope: Apparel Text-to-CAD + SKU Tracking + Security Baseline
+
+---
+
+# 1. Overview
+
+## 1.1 Purpose
+
+This document defines the product requirements for the Apparel Demo version of PAQD. The system enables structured generation of 2D apparel pattern pieces from defined garment parameters, ties outputs to versioned SKU production records, and enforces enterprise-grade security standards.
+
+---
+
+# 2. Scope Definition
+
+## 2.1 Phase 1 Scope (Strict MVP)
+
+Phase 1 of the Apparel Demo will support **T-Shirt generation only**.
+
+The purpose of limiting scope to T-Shirt:
+
+Validate deterministic CAD generation pipeline
+Validate parameter snapshot and versioning logic
+Validate SKU tracking integration
+Validate security baseline
+Reduce geometry complexity for initial implementation
+
+No other garment types will be supported in Phase 1.
+
+---
+
+## 2.2 Phase 2 Expansion (Planned)
+
+After successful validation of the T-Shirt template, the following garment templates may be added:
+
+Hoodie
+Pants
+
+These are not part of Phase 1 MVP.
+
+---
+
+# 3. Problem Statement
+
+Apparel product teams currently rely on manual CAD drafting, static PDFs, and disconnected tools to create garment patterns. This leads to:
+
+Lack of deterministic regeneration
+No structured version tracking
+No traceable approval workflow
+Poor linkage between patterns and SKU records
+
+The goal of Phase 1 is to create a deterministic, version-controlled Text-to-CAD system for T-Shirts.
+
+---
+
+# 4. MVP Garment Template: T-Shirt
+
+## 4.1 Generated Pattern Pieces
+
+The system generates the following pieces:
+
+Front bodice
+Back bodice
+Sleeve
+Neckband
+
+All pieces are 2D flat pattern pieces.
+
+---
+
+# 5. Feature 1: T-Shirt Text-to-CAD
+
+## 5.1 System Overview
+
+Structured input parameters are normalized into a canonical parameter object. A rule-based template engine generates 2D T-Shirt pattern pieces deterministically. The output is stored as a versioned CAD artifact tied to an SKU.
+
+---
+
+## 5.2 Input Parameters
+
+### Required Fields
+
+units (mm only for MVP)
+chest_circumference_mm
+shoulder_width_mm
+body_length_mm
+sleeve_length_mm
+neck_width_mm
+ease_mm
+seam_allowance_mm
+
+### Optional Fields
+
+sleeve_type (short | long)
+neckline_type (crew | v)
+
+---
+
+## 5.3 Parameter Snapshot
+
+Upon generation, the system creates an immutable JSON object:
+
+{
+  "template_type": "tshirt",
+  "units": "mm",
+  "chest_circumference_mm": 1000,
+  "ease_mm": 80,
+  "seam_allowance_mm": 10
+}
+
+This snapshot:
+
+Is stored with the CADVersion record
+Cannot be modified
+Drives deterministic regeneration
+
+---
+
+## 5.4 Validation Rules
+
+All dimensions must be positive
+neck_width_mm must be less than shoulder_width_mm minus 20
+seam_allowance_mm must be between 5 and 25
+ease_mm must be between 0 and 300
+Sleeve cap length must align within tolerance to armhole length
+
+Invalid inputs return structured validation errors.
+
+---
+
+## 5.5 Geometry Generation Logic
+
+GeneratePattern(params) → geometry primitives
+
+The generator must:
+
+Construct front outline using chest and ease
+Construct back outline with modified neckline depth
+Generate sleeve piece with matched cap length
+Apply seam allowance offset
+Add notches
+Add grainlines
+Add piece labels
+
+All geometry must:
+
+Be deterministic
+Use fixed decimal precision
+Maintain stable entity ordering
+Regenerate identically from the same parameter snapshot
+
+---
+
+## 5.6 Output Artifacts
+
+For each generation:
+
+1. DXF file
+2. SVG preview
+3. Parameter snapshot JSON
+4. Diff summary if version > 1
+5. CADVersion record
+
+---
+
+# 6. Feature 2: SKU Tracking
+
+## 6.1 SKU Object
+
+sku_id
+sku_name
+garment_type (always tshirt in Phase 1)
+owner
+status
+latest_cad_version_id
+created_at
+updated_at
+
+---
+
+## 6.2 SKU Status Enum
+
+draft
+revision
+approved
+production_ready
+
+---
+
+## 6.3 SKU Board View
+
+Displays:
+
+SKU name
+Owner
+Status
+Latest version number
+
+---
+
+## 6.4 SKU Detail View
+
+Displays:
+
+Approved pattern preview
+Version history
+Parameter diffs
+Audit log
+
+---
+
+# 7. Feature 3: Security Baseline
+
+## 7.1 Multi-Tenant Isolation
+
+All tables include tenant_id
+All queries enforce tenant scoping
+Cross-tenant access attempts fail
+
+## 7.2 RBAC Roles
+
+Admin
+Manager
+Contributor
+Viewer
+
+Only Admin and Manager may approve CAD versions.
+
+## 7.3 Secure File Handling
+
+Private object storage
+Signed URLs with short TTL
+File validation on upload
+Audit logging of downloads
+
+---
+
+# 8. API Endpoints
+
+POST   /api/skus
+GET    /api/skus
+GET    /api/skus/{sku_id}
+POST   /api/skus/{sku_id}/cad/generate
+POST   /api/cad/{cad_version_id}/approve
+POST   /api/cad/{cad_version_id}/request-changes
+
+---
+
+# 9. Acceptance Criteria
+
+1. Valid structured inputs generate DXF and preview
+2. Regenerating from parameter snapshot produces identical output
+3. Creating version 2 preserves version 1 immutably
+4. Approval updates SKU latest version
+5. Cross-tenant access is blocked
+6. Audit logs capture generation and approval actions
+
+---
+
+# 10. Demo Flow
+
+1. Create SKU: T-Shirt Size M
+2. Generate pattern version 1
+3. Modify ease and regenerate version 2
+4. Approve version 2
+5. Display version history
+6. Regenerate from snapshot to demonstrate determinism
+
+---
+
+# 11. Future Expansion (Phase 2)
+
+Hoodie template
+Pants template
+Multi-size grading engine
+Parametric constraint modeling
+3D visualization
+ERP integration

@@ -81,4 +81,21 @@ export const STATUS_COLORS: Record<string, string> = {
   approved: 'bg-green-600',
   rejected: 'bg-red-500',
   cancelled: 'bg-gray-400',
+  draft: 'bg-gray-500',
+  revision: 'bg-amber-500',
+  production_ready: 'bg-indigo-600',
 }
+
+export const SKU_STATUSES = ['draft', 'revision', 'approved', 'production_ready'] as const
+
+export const CAD_PARAM_FIELDS = [
+  { key: 'chest_circumference_mm', label: 'Chest Circumference (mm)', type: 'number' as const, required: true },
+  { key: 'shoulder_width_mm', label: 'Shoulder Width (mm)', type: 'number' as const, required: true },
+  { key: 'body_length_mm', label: 'Body Length (mm)', type: 'number' as const, required: true },
+  { key: 'sleeve_length_mm', label: 'Sleeve Length (mm)', type: 'number' as const, required: true },
+  { key: 'neck_width_mm', label: 'Neck Width (mm)', type: 'number' as const, required: true },
+  { key: 'ease_mm', label: 'Ease (mm)', type: 'number' as const, required: true },
+  { key: 'seam_allowance_mm', label: 'Seam Allowance (mm)', type: 'number' as const, required: true },
+  { key: 'sleeve_type', label: 'Sleeve Type', type: 'select' as const, options: ['short', 'long'], required: false },
+  { key: 'neckline_type', label: 'Neckline Type', type: 'select' as const, options: ['crew', 'v'], required: false },
+] as const
