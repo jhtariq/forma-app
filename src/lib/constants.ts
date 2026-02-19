@@ -88,14 +88,179 @@ export const STATUS_COLORS: Record<string, string> = {
 
 export const SKU_STATUSES = ['draft', 'revision', 'approved', 'production_ready'] as const
 
-export const CAD_PARAM_FIELDS = [
-  { key: 'chest_circumference_mm', label: 'Chest Circumference (mm)', type: 'number' as const, required: true },
-  { key: 'shoulder_width_mm', label: 'Shoulder Width (mm)', type: 'number' as const, required: true },
-  { key: 'body_length_mm', label: 'Body Length (mm)', type: 'number' as const, required: true },
-  { key: 'sleeve_length_mm', label: 'Sleeve Length (mm)', type: 'number' as const, required: true },
-  { key: 'neck_width_mm', label: 'Neck Width (mm)', type: 'number' as const, required: true },
-  { key: 'ease_mm', label: 'Ease (mm)', type: 'number' as const, required: true },
-  { key: 'seam_allowance_mm', label: 'Seam Allowance (mm)', type: 'number' as const, required: true },
-  { key: 'sleeve_type', label: 'Sleeve Type', type: 'select' as const, options: ['short', 'long'], required: false },
-  { key: 'neckline_type', label: 'Neckline Type', type: 'select' as const, options: ['crew', 'v'], required: false },
-] as const
+// Legacy — kept so old code referencing CAD_PARAM_FIELDS doesn't break at compile time,
+// but the generate page now uses CAD_PARAM_SECTIONS below.
+export const CAD_PARAM_FIELDS = [] as const
+
+export type CadFieldType = 'number' | 'select' | 'text' | 'checkbox'
+
+export interface CadParamField {
+  key: string
+  label: string
+  type: CadFieldType
+  required: boolean
+  placeholder?: string
+  options?: string[]
+  conditional?: string
+}
+
+export interface CadParamSection {
+  section: string
+  collapsible?: boolean
+  fields: CadParamField[]
+}
+
+export const CAD_PARAM_SECTIONS: CadParamSection[] = [
+  {
+    section: 'Identity',
+    fields: [
+      { key: 'size_label', label: 'Size Label', type: 'text', required: true, placeholder: 'M' },
+      {
+        key: 'fit_profile',
+        label: 'Fit Profile',
+        type: 'select',
+        required: true,
+        options: ['slim', 'regular', 'relaxed', 'oversized'],
+      },
+    ],
+  },
+  {
+    section: 'Body',
+    fields: [
+      { key: 'chest_finished_circumference_mm', label: 'Chest Circumference (mm)', type: 'number', required: true },
+      { key: 'body_length_hps_to_hem_mm', label: 'Body Length HPS→Hem (mm)', type: 'number', required: true },
+      { key: 'shoulder_width_mm', label: 'Shoulder Width (mm)', type: 'number', required: true },
+      { key: 'hem_sweep_width_mm', label: 'Hem Sweep Width (mm)', type: 'number', required: true },
+    ],
+  },
+  {
+    section: 'Sleeve',
+    fields: [
+      {
+        key: 'sleeve_type',
+        label: 'Sleeve Type',
+        type: 'select',
+        required: true,
+        options: ['short', 'long'],
+      },
+      { key: 'sleeve_length_mm', label: 'Sleeve Length (mm)', type: 'number', required: true },
+      { key: 'bicep_width_mm', label: 'Bicep Width (mm)', type: 'number', required: true },
+      { key: 'sleeve_opening_width_mm', label: 'Sleeve Opening Width (mm)', type: 'number', required: true },
+      { key: 'drop_shoulder_mm', label: 'Drop Shoulder (mm)', type: 'number', required: false },
+    ],
+  },
+  {
+    section: 'Neckline',
+    fields: [
+      {
+        key: 'neckline_type',
+        label: 'Neckline Type',
+        type: 'select',
+        required: true,
+        options: ['crew', 'v'],
+      },
+      { key: 'neck_width_mm', label: 'Neck Width (mm)', type: 'number', required: true },
+      { key: 'neck_depth_front_mm', label: 'Neck Depth Front (mm)', type: 'number', required: true },
+      { key: 'neck_depth_back_mm', label: 'Neck Depth Back (mm)', type: 'number', required: true },
+      { key: 'neckband_finished_width_mm', label: 'Neckband Width (mm)', type: 'number', required: true },
+      {
+        key: 'fabric_stretch_class',
+        label: 'Fabric Stretch Class',
+        type: 'select',
+        required: true,
+        options: ['low', 'medium', 'high'],
+      },
+    ],
+  },
+  {
+    section: 'Allowances',
+    fields: [
+      { key: 'seam_allowance_mm', label: 'Seam Allowance (mm)', type: 'number', required: true },
+      { key: 'hem_allowance_body_mm', label: 'Hem Allowance Body (mm)', type: 'number', required: true },
+      { key: 'hem_allowance_sleeve_mm', label: 'Hem Allowance Sleeve (mm)', type: 'number', required: true },
+    ],
+  },
+  {
+    section: 'Pocket',
+    collapsible: true,
+    fields: [
+      { key: 'pocket_enabled', label: 'Enable Pocket', type: 'checkbox', required: false },
+      {
+        key: 'pocket_width_mm',
+        label: 'Pocket Width (mm)',
+        type: 'number',
+        required: false,
+        conditional: 'pocket_enabled',
+      },
+      {
+        key: 'pocket_height_mm',
+        label: 'Pocket Height (mm)',
+        type: 'number',
+        required: false,
+        conditional: 'pocket_enabled',
+      },
+      {
+        key: 'pocket_placement_from_cf_mm',
+        label: 'Placement from CF (mm)',
+        type: 'number',
+        required: false,
+        conditional: 'pocket_enabled',
+      },
+      {
+        key: 'pocket_placement_from_shoulder_mm',
+        label: 'Placement from Shoulder (mm)',
+        type: 'number',
+        required: false,
+        conditional: 'pocket_enabled',
+      },
+      {
+        key: 'pocket_corner_radius_mm',
+        label: 'Corner Radius (mm)',
+        type: 'number',
+        required: false,
+        conditional: 'pocket_enabled',
+      },
+    ],
+  },
+]
+
+export const COLOR_SWATCHES: { name: string; hex: string }[] = [
+  { name: 'White', hex: '#FFFFFF' },
+  { name: 'Off White', hex: '#F5F0E8' },
+  { name: 'Black', hex: '#1A1A1A' },
+  { name: 'Charcoal', hex: '#3D3D3D' },
+  { name: 'Navy', hex: '#1B2A4A' },
+  { name: 'Royal Blue', hex: '#1E4DB7' },
+  { name: 'Sky Blue', hex: '#5BA4CF' },
+  { name: 'Red', hex: '#C41E3A' },
+  { name: 'Forest Green', hex: '#2D5016' },
+  { name: 'Sage', hex: '#8A9A5B' },
+  { name: 'Heather Gray', hex: '#9E9E9E' },
+  { name: 'Sand', hex: '#D4B896' },
+]
+
+export const CAD_DEFAULT_PARAMS = {
+  size_label: 'M',
+  fit_profile: 'regular' as const,
+  chest_finished_circumference_mm: 1040,
+  body_length_hps_to_hem_mm: 700,
+  shoulder_width_mm: 460,
+  hem_sweep_width_mm: 1040,
+  sleeve_type: 'short' as const,
+  sleeve_length_mm: 220,
+  bicep_width_mm: 360,
+  sleeve_opening_width_mm: 320,
+  drop_shoulder_mm: 0,
+  neckline_type: 'crew' as const,
+  neck_width_mm: 190,
+  neck_depth_front_mm: 80,
+  neck_depth_back_mm: 25,
+  neckband_finished_width_mm: 20,
+  fabric_stretch_class: 'medium' as const,
+  seam_allowance_mm: 10,
+  hem_allowance_body_mm: 20,
+  hem_allowance_sleeve_mm: 20,
+  pocket_enabled: false,
+  body_color_hex: '#F5F0E8',
+  neckband_color_hex: '#1A1A1A',
+}

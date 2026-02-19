@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server'
-import { generateTshirtPattern, renderSvg, renderDxf, validateTshirtParams, computeParamDiff } from '@/lib/cad'
+import {
+  generateTshirtPattern,
+  renderSvg,
+  renderDxf,
+  renderTechSketch,
+  generateSpecSheet,
+  generateConstructionNotes,
+  generateBom,
+  assembleManufacturingPack,
+  validateTshirtParams,
+  computeParamDiff,
+  buildVersionDiffJson,
+} from '@/lib/cad'
 import type { TshirtParams } from '@/lib/cad'
 
 export async function POST(request: NextRequest) {
@@ -14,14 +26,19 @@ export async function POST(request: NextRequest) {
     }
 
     if (!projectId || !skuId || !params) {
-      return NextResponse.json({ error: 'Missing required fields: projectId, skuId, params' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Missing required fields: projectId, skuId, params' },
+        { status: 400 }
+      )
     }
 
     const supabase = await createServerSupabaseClient()
     const serviceClient = await createServiceRoleClient()
 
     // Auth check
-    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
     if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -56,13 +73,11 @@ export async function POST(request: NextRequest) {
     // Validate parameters
     const validation = validateTshirtParams(params)
     if (!validation.valid) {
-      return NextResponse.json({ error: 'Validation failed', errors: validation.errors }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Validation failed', errors: validation.errors },
+        { status: 400 }
+      )
     }
-
-    // Generate pattern
-    const pieces = generateTshirtPattern(params)
-    const svgContent = renderSvg(pieces)
-    const dxfContent = renderDxf(pieces)
 
     // Determine next version
     const { data: existingVersions } = await serviceClient
@@ -72,37 +87,81 @@ export async function POST(request: NextRequest) {
       .order('version_int', { ascending: false })
       .limit(1)
 
-    const nextVersion = existingVersions && existingVersions.length > 0
-      ? existingVersions[0].version_int + 1
-      : 1
+    const nextVersion =
+      existingVersions && existingVersions.length > 0
+        ? existingVersions[0].version_int + 1
+        : 1
+
+    // Generate pattern (PatternIR + PatternPiece[])
+    const { ir, pieces } = generateTshirtPattern(params, nextVersion)
+
+    // Render all artifacts
+    const svgContent = renderSvg(ir)
+    const dxfContent = renderDxf(ir)
+    const techSketchSvg = renderTechSketch(ir)
+    const specSheet = generateSpecSheet(ir)
+    const constructionNotes = generateConstructionNotes(ir)
+    const bom = generateBom(ir)
 
     // Compute diff if not first version
     let diffSummary: string | null = null
+    let versionDiff: object | null = null
     if (existingVersions && existingVersions.length > 0) {
       const oldParams = existingVersions[0].parameter_snapshot as TshirtParams
       diffSummary = computeParamDiff(oldParams, params)
+      versionDiff = buildVersionDiffJson(
+        oldParams,
+        params,
+        existingVersions[0].version_int,
+        nextVersion
+      )
     }
+
+    // Assemble Manufacturing Pack .zip
+    const zipBuffer = await assembleManufacturingPack({
+      dxf: dxfContent,
+      svg: svgContent,
+      techSketchSvg,
+      specSheet,
+      constructionNotes,
+      bom,
+      parameterSnapshot: { ...params, derived: ir.derived, template_type: 'tshirt', schema_version: 2 },
+      versionDiff: versionDiff ?? undefined,
+    })
 
     // Generate version ID
     const versionId = crypto.randomUUID()
 
-    // Upload DXF and SVG to storage
+    // Upload all files to storage
     const basePath = `${appUser.org_id}/${projectId}/cad/${skuId}/${versionId}`
     const dxfPath = `${basePath}/pattern.dxf`
-    const svgPath = `${basePath}/pattern.svg`
+    const svgPath = `${basePath}/pattern_preview.svg`
+    const techSketchPath = `${basePath}/tech_sketch.svg`
+    const packPath = `${basePath}/manufacturing_pack.zip`
 
-    const [dxfUpload, svgUpload] = await Promise.all([
+    const [dxfUpload, svgUpload, techSketchUpload, packUpload] = await Promise.all([
       serviceClient.storage
         .from('project-documents')
         .upload(dxfPath, Buffer.from(dxfContent), { contentType: 'application/dxf' }),
       serviceClient.storage
         .from('project-documents')
         .upload(svgPath, Buffer.from(svgContent), { contentType: 'image/svg+xml' }),
+      serviceClient.storage
+        .from('project-documents')
+        .upload(techSketchPath, Buffer.from(techSketchSvg), { contentType: 'image/svg+xml' }),
+      serviceClient.storage
+        .from('project-documents')
+        .upload(packPath, zipBuffer, { contentType: 'application/zip' }),
     ])
 
-    if (dxfUpload.error || svgUpload.error) {
+    if (dxfUpload.error || svgUpload.error || techSketchUpload.error || packUpload.error) {
+      const errMsg =
+        dxfUpload.error?.message ||
+        svgUpload.error?.message ||
+        techSketchUpload.error?.message ||
+        packUpload.error?.message
       return NextResponse.json(
-        { error: 'Failed to upload CAD files', details: dxfUpload.error?.message || svgUpload.error?.message },
+        { error: 'Failed to upload CAD files', details: errMsg },
         { status: 500 }
       )
     }
@@ -114,10 +173,13 @@ export async function POST(request: NextRequest) {
         id: versionId,
         sku_id: skuId,
         version_int: nextVersion,
-        parameter_snapshot: params,
+        parameter_snapshot: params as unknown as Record<string, unknown>,
         svg_content: svgContent,
         dxf_storage_path: dxfPath,
         svg_storage_path: svgPath,
+        tech_sketch_storage_path: techSketchPath,
+        manufacturing_pack_path: packPath,
+        pattern_ir: ir as unknown as Record<string, unknown>,
         diff_summary: diffSummary,
         notes: notes || null,
         created_by: appUser.id,
@@ -126,10 +188,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError || !cadVersion) {
-      return NextResponse.json({ error: 'Failed to create CAD version', details: insertError?.message }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Failed to create CAD version', details: insertError?.message },
+        { status: 500 }
+      )
     }
 
-    // Update SKU: set latest_cad_version_id and status
+    // Update SKU
     const newStatus = sku.status === 'draft' ? 'revision' : sku.status
     await serviceClient
       .from('skus')
@@ -152,20 +217,23 @@ export async function POST(request: NextRequest) {
         sku_name: sku.name,
         version: nextVersion,
         garment_type: sku.garment_type,
+        sleeve_cap_adjusted: ir.derived.sleeve_cap_adjusted,
+        sleeve_cap_adjustment_mm: ir.derived.sleeve_cap_adjustment_mm,
       },
     })
 
     return NextResponse.json({
       cadVersionId: versionId,
       svgContent,
+      techSketchSvg,
       version: nextVersion,
       diffSummary,
+      sleeveCapAdjusted: ir.derived.sleeve_cap_adjusted,
+      sleeveCapAdjustmentMm: ir.derived.sleeve_cap_adjustment_mm,
+      manufacturingPackPath: packPath,
     })
   } catch (err) {
     console.error('CAD generation error:', err)
-    return NextResponse.json(
-      { error: 'Failed to generate CAD' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate CAD' }, { status: 500 })
   }
 }

@@ -23,6 +23,7 @@ export type AuditAction =
   | 'sku_created'
   | 'cad_version_generated'
   | 'cad_pushed_to_documents'
+  | 'manufacturing_pack_downloaded'
 
 export type DocumentTag = 'Spec' | 'BOM' | 'QC' | 'Compliance' | 'Shipping' | 'Other'
 
@@ -372,6 +373,9 @@ export interface Database {
           notes: string | null
           created_by: string
           created_at: string
+          pattern_ir: Json | null
+          manufacturing_pack_path: string | null
+          tech_sketch_storage_path: string | null
         }
         Insert: {
           id?: string
@@ -385,6 +389,9 @@ export interface Database {
           notes?: string | null
           created_by: string
           created_at?: string
+          pattern_ir?: Json | null
+          manufacturing_pack_path?: string | null
+          tech_sketch_storage_path?: string | null
         }
         Update: {
           id?: string
@@ -398,6 +405,9 @@ export interface Database {
           notes?: string | null
           created_by?: string
           created_at?: string
+          pattern_ir?: Json | null
+          manufacturing_pack_path?: string | null
+          tech_sketch_storage_path?: string | null
         }
       }
       approval_requests: {

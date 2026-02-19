@@ -19,7 +19,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronRight, GitCompare, Eye, History } from 'lucide-react'
+import { ChevronDown, ChevronRight, GitCompare, Eye, History, Package } from 'lucide-react'
 import type { TshirtParams } from '@/lib/cad'
 
 interface CadVersion {
@@ -32,19 +32,40 @@ interface CadVersion {
   notes: string | null
   created_by: string
   created_at: string
+  manufacturing_pack_path: string | null
   app_users: { name: string } | null
 }
 
 const PARAM_LABELS: Record<string, string> = {
-  chest_circumference_mm: 'Chest Circumference (mm)',
+  // Identity
+  size_label: 'Size Label',
+  fit_profile: 'Fit Profile',
+  // Body
+  chest_finished_circumference_mm: 'Chest Circumference (mm)',
+  body_length_hps_to_hem_mm: 'Body Length HPS→Hem (mm)',
   shoulder_width_mm: 'Shoulder Width (mm)',
-  body_length_mm: 'Body Length (mm)',
-  sleeve_length_mm: 'Sleeve Length (mm)',
-  neck_width_mm: 'Neck Width (mm)',
-  ease_mm: 'Ease (mm)',
-  seam_allowance_mm: 'Seam Allowance (mm)',
+  hem_sweep_width_mm: 'Hem Sweep Width (mm)',
+  // Sleeve
   sleeve_type: 'Sleeve Type',
+  sleeve_length_mm: 'Sleeve Length (mm)',
+  bicep_width_mm: 'Bicep Width (mm)',
+  sleeve_opening_width_mm: 'Sleeve Opening (mm)',
+  drop_shoulder_mm: 'Drop Shoulder (mm)',
+  // Neckline
   neckline_type: 'Neckline Type',
+  neck_width_mm: 'Neck Width (mm)',
+  neck_depth_front_mm: 'Neck Depth Front (mm)',
+  neck_depth_back_mm: 'Neck Depth Back (mm)',
+  neckband_finished_width_mm: 'Neckband Width (mm)',
+  fabric_stretch_class: 'Fabric Stretch',
+  // Allowances
+  seam_allowance_mm: 'Seam Allowance (mm)',
+  hem_allowance_body_mm: 'Hem Allowance Body (mm)',
+  hem_allowance_sleeve_mm: 'Hem Allowance Sleeve (mm)',
+  // Pocket
+  pocket_enabled: 'Pocket Enabled',
+  pocket_width_mm: 'Pocket Width (mm)',
+  pocket_height_mm: 'Pocket Height (mm)',
 }
 
 export function VersionHistory({ skuId }: { skuId: string }) {
@@ -53,13 +74,14 @@ export function VersionHistory({ skuId }: { skuId: string }) {
   const [isOpen, setIsOpen] = useState(true)
   const [previewVersion, setPreviewVersion] = useState<CadVersion | null>(null)
   const [compareVersions, setCompareVersions] = useState<{ left: CadVersion; right: CadVersion } | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const { data: versions } = useQuery({
     queryKey: ['cad-versions', skuId],
     queryFn: async () => {
       const { data } = await supabase
         .from('cad_versions')
-        .select('*, app_users!cad_versions_created_by_fkey(name)')
+        .select('*, app_users!cad_versions_created_by_fkey(name), manufacturing_pack_path')
         .eq('sku_id', skuId)
         .order('version_int', { ascending: false })
 
@@ -78,6 +100,26 @@ export function VersionHistory({ skuId }: { skuId: string }) {
     const prevVersion = versions[idx + 1]
     if (prevVersion) {
       setCompareVersions({ left: prevVersion, right: version })
+    }
+  }
+
+  const handleDownloadPack = async (version: CadVersion) => {
+    if (!version.manufacturing_pack_path) return
+    setDownloadingId(version.id)
+    try {
+      const res = await fetch(`/api/cad/${version.id}/manufacturing-pack`)
+      if (!res.ok) throw new Error('Failed to get download URL')
+      const { url } = await res.json()
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `manufacturing_pack_v${version.version_int}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch {
+      // silently ignore download errors in history panel
+    } finally {
+      setDownloadingId(null)
     }
   }
 
@@ -132,6 +174,18 @@ export function VersionHistory({ skuId }: { skuId: string }) {
                           onClick={() => handleCompare(version)}
                         >
                           <GitCompare className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {version.manufacturing_pack_path && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-neutral-400 hover:text-emerald-400 h-7 px-2"
+                          onClick={() => handleDownloadPack(version)}
+                          disabled={downloadingId === version.id}
+                          title="Download Manufacturing Pack"
+                        >
+                          <Package className="h-3.5 w-3.5" />
                         </Button>
                       )}
                     </div>

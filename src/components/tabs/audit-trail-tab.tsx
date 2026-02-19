@@ -14,6 +14,7 @@ import {
   Download,
   Ruler,
   FolderInput,
+  Package,
 } from 'lucide-react'
 import type { AuditAction } from '@/lib/types/database'
 
@@ -70,6 +71,11 @@ const ACTION_CONFIG: Record<
     icon: <FolderInput className="h-4 w-4" />,
     label: 'CAD pushed to documents',
     color: 'text-sky-400 bg-sky-400/10 border-sky-400/30',
+  },
+  manufacturing_pack_downloaded: {
+    icon: <Package className="h-4 w-4" />,
+    label: 'Manufacturing pack downloaded',
+    color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
   },
 }
 

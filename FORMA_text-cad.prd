@@ -1,8 +1,8 @@
 # PAQD Apparel Demo
 ## Product Requirements Document (PRD)
-Version: 1.1
-Date: 2026-02-16
-Scope: Apparel Text-to-CAD + SKU Tracking + Security Baseline
+Version: 1.2
+Date: 2026-02-19
+Scope: Apparel Text to CAD, SKU Tracking, Manufacturer Ready Outputs, Security Baseline
 
 ---
 
@@ -10,272 +10,509 @@ Scope: Apparel Text-to-CAD + SKU Tracking + Security Baseline
 
 ## 1.1 Purpose
 
-This document defines the product requirements for the Apparel Demo version of PAQD. The system enables structured generation of 2D apparel pattern pieces from defined garment parameters, ties outputs to versioned SKU production records, and enforces enterprise-grade security standards.
+This document defines the product requirements for the Apparel Demo version of PAQD. The system enables structured generation of manufacturer usable 2D apparel pattern pieces from defined garment parameters, produces a complete Manufacturing Pack bundle, ties outputs to versioned SKU production records, and enforces enterprise grade security standards.
+
+## 1.2 Definition of Manufacturer Usable
+
+Manufacturer usable means the system outputs, per approved CAD version:
+
+1. Production pattern files with clear semantics and annotations, suitable for import and cutting workflows
+2. A technical flat sketch for factory communication
+3. A measurement spec sheet with tolerances for the selected size
+4. Construction notes describing seam and finish intent
+5. A 3D visual preview for silhouette and color only, not a fit guarantee
 
 ---
 
 # 2. Scope Definition
 
-## 2.1 Phase 1 Scope (Strict MVP)
+## 2.1 Phase 1 Scope, Strict MVP
 
-Phase 1 of the Apparel Demo will support **T-Shirt generation only**.
+Phase 1 supports T shirt generation only.
 
-The purpose of limiting scope to T-Shirt:
+The purpose of limiting scope to t shirt:
 
-Validate deterministic CAD generation pipeline
-Validate parameter snapshot and versioning logic
-Validate SKU tracking integration
-Validate security baseline
-Reduce geometry complexity for initial implementation
+1. Validate deterministic CAD generation pipeline
+2. Validate parameter snapshot and versioning logic
+3. Validate SKU tracking integration
+4. Validate security baseline
+5. Validate manufacturer ready deliverables for one garment template
+6. Reduce geometry complexity for initial implementation
 
-No other garment types will be supported in Phase 1.
+No other garment types are supported in Phase 1.
 
----
+Phase 1 will support a single size per generated CADVersion, grading and multi size nests are out of scope for Phase 1.
 
-## 2.2 Phase 2 Expansion (Planned)
+## 2.2 Phase 2 Expansion, Planned
 
-After successful validation of the T-Shirt template, the following garment templates may be added:
+After successful validation of the t shirt template, the following may be added:
 
-Hoodie
-Pants
-
-These are not part of Phase 1 MVP.
+1. Hoodie template
+2. Pants template
+3. Multi size grading engine and nests
+4. Additional construction features such as rib cuffs, plackets, hoods, fly, waistband
+5. Extended factory export support
 
 ---
 
 # 3. Problem Statement
 
-Apparel product teams currently rely on manual CAD drafting, static PDFs, and disconnected tools to create garment patterns. This leads to:
+Apparel product teams currently rely on manual pattern drafting, static PDFs, and disconnected tools to create garment patterns. This leads to:
 
-Lack of deterministic regeneration
-No structured version tracking
-No traceable approval workflow
-Poor linkage between patterns and SKU records
+1. Lack of deterministic regeneration
+2. No structured version tracking
+3. No traceable approval workflow
+4. Poor linkage between patterns and SKU records
+5. Rework and confusion due to missing spec sheets and unclear construction intent
 
-The goal of Phase 1 is to create a deterministic, version-controlled Text-to-CAD system for T-Shirts.
+The goal of Phase 1 is to create a deterministic, version controlled Text to CAD system for t shirts that outputs a manufacturer usable Manufacturing Pack.
 
 ---
 
-# 4. MVP Garment Template: T-Shirt
+# 4. MVP Garment Template, T Shirt
 
 ## 4.1 Generated Pattern Pieces
 
-The system generates the following pieces:
+The system generates the following 2D pattern pieces for the base size:
 
-Front bodice
-Back bodice
-Sleeve
-Neckband
+1. Front bodice
+2. Back bodice
+3. Sleeve, one piece shape to be cut as a pair
+4. Neckband
+5. Optional patch pocket, if enabled
 
 All pieces are 2D flat pattern pieces.
 
+## 4.2 Construction Assumptions for MVP
+
+To keep Phase 1 manufacturable while simple:
+
+1. Fabric type assumption is knit jersey for body, and knit rib or jersey for neckband
+2. Sleeve is set in sleeve for the base template
+3. Neckband is a separate piece with a deterministic length ratio based on neckline perimeter and stretch class
+4. Hems use a simple folded hem finish, stitch types are described in Construction Notes
+
 ---
 
-# 5. Feature 1: T-Shirt Text-to-CAD
+# 5. Feature 1, T Shirt Text to CAD
 
 ## 5.1 System Overview
 
-Structured input parameters are normalized into a canonical parameter object. A rule-based template engine generates 2D T-Shirt pattern pieces deterministically. The output is stored as a versioned CAD artifact tied to an SKU.
-
----
+Structured input parameters are normalized into a canonical parameter object. A rule based template engine generates 2D t shirt pattern pieces deterministically. The output is stored as a versioned CAD artifact tied to an SKU. Each CADVersion produces a Manufacturing Pack bundle.
 
 ## 5.2 Input Parameters
 
 ### Required Fields
 
-units (mm only for MVP)
-chest_circumference_mm
+units, mm only for MVP
+size_label, string, for example S, M, L
+fit_profile, slim, regular, relaxed, oversized
+chest_finished_circumference_mm
+body_length_hps_to_hem_mm
 shoulder_width_mm
-body_length_mm
 sleeve_length_mm
+bicep_width_mm
+sleeve_opening_width_mm
+hem_sweep_width_mm
+
+neckline_type, crew or v
 neck_width_mm
-ease_mm
-seam_allowance_mm
+neck_depth_front_mm
+neck_depth_back_mm
+
+neckband_finished_width_mm
+fabric_stretch_class, low, medium, high
+
+seam_allowance_mm, for main seams
+hem_allowance_body_mm
+hem_allowance_sleeve_mm
 
 ### Optional Fields
 
-sleeve_type (short | long)
-neckline_type (crew | v)
+sleeve_type, short or long
+drop_shoulder_mm, defaults to 0
+pocket_enabled, boolean
 
----
+If pocket_enabled is true:
+
+pocket_width_mm
+pocket_height_mm
+pocket_placement_from_cf_mm
+pocket_placement_from_shoulder_mm
+pocket_corner_radius_mm, optional
+
+### Derived Internal Parameters, Not Directly Edited in Phase 1
+
+These are computed deterministically from the required fields and template defaults:
+
+armhole_depth_mm
+armhole_curve_template_scale
+sleeve_cap_height_mm
+sleeve_cap_ease_mm, default near 0 for knit
+neckband_length_ratio, derived from stretch class
 
 ## 5.3 Parameter Snapshot
 
-Upon generation, the system creates an immutable JSON object:
+Upon generation, the system creates an immutable JSON object that contains all required fields, optional fields, and derived internal parameters.
 
+Example:
+
+```json
 {
   "template_type": "tshirt",
   "units": "mm",
-  "chest_circumference_mm": 1000,
-  "ease_mm": 80,
-  "seam_allowance_mm": 10
+  "size_label": "M",
+  "fit_profile": "regular",
+  "chest_finished_circumference_mm": 1040,
+  "body_length_hps_to_hem_mm": 700,
+  "shoulder_width_mm": 460,
+  "sleeve_length_mm": 220,
+  "bicep_width_mm": 360,
+  "sleeve_opening_width_mm": 320,
+  "hem_sweep_width_mm": 1040,
+  "neckline_type": "crew",
+  "neck_width_mm": 190,
+  "neck_depth_front_mm": 80,
+  "neck_depth_back_mm": 25,
+  "neckband_finished_width_mm": 20,
+  "fabric_stretch_class": "medium",
+  "seam_allowance_mm": 10,
+  "hem_allowance_body_mm": 20,
+  "hem_allowance_sleeve_mm": 20,
+  "pocket_enabled": true,
+  "pocket_width_mm": 120,
+  "pocket_height_mm": 130,
+  "pocket_placement_from_cf_mm": 70,
+  "pocket_placement_from_shoulder_mm": 130,
+  "derived": {
+    "armhole_depth_mm": 230,
+    "sleeve_cap_height_mm": 110,
+    "sleeve_cap_ease_mm": 0,
+    "neckband_length_ratio": 0.85
+  }
 }
+
 
 This snapshot:
 
 Is stored with the CADVersion record
-Cannot be modified
+
+Cannot be modified after creation
+
 Drives deterministic regeneration
 
----
+5.4 Validation Rules
 
-## 5.4 Validation Rules
+All dimensions must be positive.
 
-All dimensions must be positive
+Structural constraints:
+
 neck_width_mm must be less than shoulder_width_mm minus 20
+
+neck_depth_front_mm must be greater than or equal to neck_depth_back_mm
+
 seam_allowance_mm must be between 5 and 25
-ease_mm must be between 0 and 300
-Sleeve cap length must align within tolerance to armhole length
 
-Invalid inputs return structured validation errors.
+hem_allowance_body_mm must be between 10 and 40
 
----
+hem_allowance_sleeve_mm must be between 10 and 40
 
-## 5.5 Geometry Generation Logic
+Pocket constraints if enabled:
 
-GeneratePattern(params) → geometry primitives
+pocket_width_mm and pocket_height_mm must be within reasonable bounds, defaults 60 to 180
+
+pocket placement must fall within the front bodice sew area with a clearance margin
+
+Seam matching constraints:
+
+Sleeve cap sew edge length must match the combined front and back armhole sew edge length within tolerance
+
+Notch match points must exist and be consistent, including sleeve notch and front and back armhole notches
+
+Neckband sew edge length must match neckline sew edge length after applying neckband_length_ratio and seam rules, within tolerance
+
+Invalid inputs return structured validation errors with field and rule identifiers.
+
+5.5 Canonical Pattern Intermediate Representation
+
+The generator must produce a canonical intermediate representation, called PatternIR, which is stored and used for export rendering.
+
+PatternIR requirements:
+
+Pieces are explicit objects with name, cut quantity, mirror or fold semantics, and units
+
+Each piece contains a closed outer cut contour
+
+Each piece contains one or more sew edges, each sew edge has a seam_id
+
+Notches are typed, each notch has a notch_id and is attached to a seam_id
+
+Grainline is a vector with start and end points in piece local coordinates
+
+Labels include size_label, piece name, cut instruction, and version
+
+Edge semantics:
+
+edge_type, cut, sew, hem, fold, placement, internal
+
+seam_id, used to match between pieces
+
+allowance_type, seam_allowance, hem_allowance_body, hem_allowance_sleeve, or none
+
+Determinism rules:
+
+Fixed rounding for all coordinates, configured once for the project
+
+Stable ordering of pieces, edges, and annotations
+
+No randomization, no dependency on current time
+
+5.6 Geometry Generation Logic
+
+GeneratePattern(params) returns PatternIR.
 
 The generator must:
 
-Construct front outline using chest and ease
-Construct back outline with modified neckline depth
-Generate sleeve piece with matched cap length
-Apply seam allowance offset
-Add notches
-Add grainlines
-Add piece labels
+Construct front and back outlines from chest, hem sweep, body length, shoulder width, and armhole depth
 
-All geometry must:
+Construct neckline geometry based on neckline_type, neck width, and neck depths
 
-Be deterministic
-Use fixed decimal precision
-Maintain stable entity ordering
-Regenerate identically from the same parameter snapshot
+Generate sleeve piece such that sleeve cap sew edge matches the armhole sew edges within tolerance
 
----
+Generate neckband piece using neckline perimeter and neckband length ratio derived from stretch class
 
-## 5.6 Output Artifacts
+Apply seam allowances and hem allowances per edge type
 
-For each generation:
+Add notches and match points for sleeve to armhole, and neckband to neckline
 
-1. DXF file
-2. SVG preview
-3. Parameter snapshot JSON
-4. Diff summary if version > 1
-5. CADVersion record
+Add grainlines and labels for each piece
 
----
+If pocket_enabled is true, generate pocket piece and place markings on front bodice
 
-# 6. Feature 2: SKU Tracking
+All geometry must regenerate identically from the same parameter snapshot.
 
-## 6.1 SKU Object
+5.7 Manufacturing Pack Output Artifacts
+
+For each CADVersion, the system produces a single Manufacturing Pack bundle.
+
+Manufacturing Pack contents:
+
+pattern_production.dxf
+Includes cut lines, sew lines, allowance lines, notches, grainlines, labels, fold lines where applicable
+Includes a defined layer standard
+
+pattern_review.pdf
+True scale plot for human review, includes a calibration square
+
+pattern_preview.svg
+Fast preview for the app UI, same semantics as DXF
+
+tech_sketch.svg
+Flat technical sketch, front and back, with callouts for neckline, sleeve, hem, and pocket if enabled
+
+spec_sheet.json
+Points of measure for the generated size, plus tolerances
+
+spec_sheet.pdf
+Human readable version of spec_sheet.json
+
+construction_notes.json
+Stitch and finish intent, neckband finish, hem finish, seam types, fabric assumptions
+
+bom.json
+Minimal bill of materials, fabric and neckband material assumptions, labels and trims placeholders
+
+parameter_snapshot.json
+Immutable snapshot used for generation
+
+version_diff.json
+Present only if version is greater than 1, contains structured differences between snapshots
+
+DXF layer standard, minimum required layers:
+
+CUT
+SEW
+ALLOWANCE
+HEM
+NOTCH
+GRAIN
+FOLD
+TEXT
+INTERNAL
+
+5.8 3D Visual Preview
+
+Phase 1 includes a 3D visual preview intended for silhouette and color only.
+
+Requirements:
+
+3D preview updates based on parameters, at minimum chest, body length, shoulder width, sleeve length, neckline type, neck width, neck depth
+
+No cloth simulation is required
+
+Materials can be flat color, optional neckband and pocket color
+
+Seams and pocket outline are shown as simple line overlays
+
+Implementation options acceptable for MVP:
+
+Template mesh morphing driven by parameter values
+
+Flat lay 3D, pieces arranged in 3D space for visual verification
+
+The 3D preview is not a fit guarantee, it is a visual aid.
+
+6. Feature 2, SKU Tracking
+6.1 SKU Object
 
 sku_id
 sku_name
-garment_type (always tshirt in Phase 1)
+garment_type, always tshirt in Phase 1
 owner
 status
 latest_cad_version_id
 created_at
 updated_at
 
----
-
-## 6.2 SKU Status Enum
+6.2 SKU Status Enum
 
 draft
 revision
 approved
 production_ready
 
----
-
-## 6.3 SKU Board View
+6.3 SKU Board View
 
 Displays:
 
 SKU name
+
 Owner
+
 Status
+
 Latest version number
 
----
+Updated at timestamp
 
-## 6.4 SKU Detail View
+6.4 SKU Detail View
 
 Displays:
 
-Approved pattern preview
+Manufacturing Pack download for approved version
+
+Pattern preview, tech sketch preview, and 3D preview
+
 Version history
+
 Parameter diffs
+
 Audit log
 
----
-
-# 7. Feature 3: Security Baseline
-
-## 7.1 Multi-Tenant Isolation
+7. Feature 3, Security Baseline
+7.1 Multi Tenant Isolation
 
 All tables include tenant_id
-All queries enforce tenant scoping
-Cross-tenant access attempts fail
 
-## 7.2 RBAC Roles
+All queries enforce tenant scoping
+
+Cross tenant access attempts fail
+
+7.2 RBAC Roles
 
 Admin
 Manager
 Contributor
 Viewer
 
-Only Admin and Manager may approve CAD versions.
+Only Admin and Manager may approve CAD versions and mark SKUs as production_ready.
 
-## 7.3 Secure File Handling
+7.3 Secure File Handling
 
 Private object storage
+
 Signed URLs with short TTL
-File validation on upload
-Audit logging of downloads
 
----
+File validation and content type checks on upload and download
 
-# 8. API Endpoints
+Audit logging of downloads and Manufacturing Pack access
 
-POST   /api/skus
-GET    /api/skus
-GET    /api/skus/{sku_id}
-POST   /api/skus/{sku_id}/cad/generate
-POST   /api/cad/{cad_version_id}/approve
-POST   /api/cad/{cad_version_id}/request-changes
+8. API Endpoints
 
----
+POST /api/skus
+GET /api/skus
+GET /api/skus/{sku_id}
 
-# 9. Acceptance Criteria
+POST /api/skus/{sku_id}/cad/generate
+GET /api/cad/{cad_version_id}/manufacturing_pack
 
-1. Valid structured inputs generate DXF and preview
-2. Regenerating from parameter snapshot produces identical output
-3. Creating version 2 preserves version 1 immutably
-4. Approval updates SKU latest version
-5. Cross-tenant access is blocked
-6. Audit logs capture generation and approval actions
+POST /api/cad/{cad_version_id}/approve
+POST /api/cad/{cad_version_id}/request_changes
 
----
+9. Acceptance Criteria
 
-# 10. Demo Flow
+Determinism:
 
-1. Create SKU: T-Shirt Size M
-2. Generate pattern version 1
-3. Modify ease and regenerate version 2
-4. Approve version 2
-5. Display version history
-6. Regenerate from snapshot to demonstrate determinism
+Valid structured inputs generate a complete Manufacturing Pack bundle
 
----
+Regenerating from the stored parameter snapshot produces identical PatternIR and identical exported artifacts, within fixed rounding rules
 
-# 11. Future Expansion (Phase 2)
+Manufacturing readiness:
+
+DXF includes all required layers and imports without manual repair into at least one target workflow tool used for validation
+
+Each pattern piece has a closed cut contour, valid allowance contours, grainline, labels, and cut instructions
+
+Seam matching validations pass, including sleeve to armhole and neckband to neckline, with notch match points
+
+Spec sheet exists and includes points of measure with tolerances for the generated size
+
+Construction notes exist and include seam and finish intent
+
+If pocket is enabled, pocket piece and placement markings are present, and tech sketch includes pocket callout
+
+Versioning and SKU linkage:
+
+Creating version 2 preserves version 1 immutably
+
+Approval updates SKU latest_cad_version_id
+
+Production_ready status requires an approved CADVersion with a valid Manufacturing Pack
+
+Security:
+
+Cross tenant access is blocked
+
+Audit logs capture generation, approval, download, and Manufacturing Pack access actions
+
+10. Demo Flow
+
+Create SKU, T shirt Size M
+
+Generate pattern version 1, pocket disabled
+
+Enable pocket and regenerate version 2
+
+Approve version 2
+
+Download Manufacturing Pack for version 2 and show contents
+
+Regenerate from snapshot to demonstrate determinism
+
+Display version history and parameter diffs
+
+11. Future Expansion, Phase 2
 
 Hoodie template
+
 Pants template
-Multi-size grading engine
-Parametric constraint modeling
-3D visualization
+
+Multi size grading engine and nests
+
+Parametric constraint modeling for additional construction details
+
+Expanded 3D preview options
+
 ERP integration
+
+Vendor specific export profiles
