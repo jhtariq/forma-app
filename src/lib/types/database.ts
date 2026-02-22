@@ -8,7 +8,8 @@ export type Json =
 
 export type UserRole = 'admin' | 'member' | 'external' | 'viewer'
 export type ProjectStatus = 'Draft' | 'In Review' | 'Approved' | 'Exported'
-export type EntityType = 'spec' | 'bom'
+export type EntityType = 'spec' | 'bom' | 'cad'
+export type SkuStatus = 'draft' | 'revision' | 'approved' | 'production_ready'
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 export type ApprovalDecisionType = 'approve' | 'reject'
 export type AuditAction =
@@ -19,6 +20,10 @@ export type AuditAction =
   | 'approval_approved'
   | 'approval_rejected'
   | 'export_generated'
+  | 'sku_created'
+  | 'cad_version_generated'
+  | 'cad_pushed_to_documents'
+  | 'manufacturing_pack_downloaded'
 
 export type DocumentTag = 'Spec' | 'BOM' | 'QC' | 'Compliance' | 'Shipping' | 'Other'
 
@@ -317,6 +322,94 @@ export interface Database {
           notes?: string | null
         }
       }
+      skus: {
+        Row: {
+          id: string
+          project_id: string
+          org_id: string
+          name: string
+          garment_type: string
+          status: SkuStatus
+          created_by: string
+          latest_cad_version_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          org_id: string
+          name: string
+          garment_type?: string
+          status?: SkuStatus
+          created_by: string
+          latest_cad_version_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          org_id?: string
+          name?: string
+          garment_type?: string
+          status?: SkuStatus
+          created_by?: string
+          latest_cad_version_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      cad_versions: {
+        Row: {
+          id: string
+          sku_id: string
+          version_int: number
+          parameter_snapshot: Json
+          svg_content: string
+          dxf_storage_path: string
+          svg_storage_path: string
+          diff_summary: string | null
+          notes: string | null
+          created_by: string
+          created_at: string
+          pattern_ir: Json | null
+          manufacturing_pack_path: string | null
+          tech_sketch_storage_path: string | null
+        }
+        Insert: {
+          id?: string
+          sku_id: string
+          version_int: number
+          parameter_snapshot: Json
+          svg_content: string
+          dxf_storage_path: string
+          svg_storage_path: string
+          diff_summary?: string | null
+          notes?: string | null
+          created_by: string
+          created_at?: string
+          pattern_ir?: Json | null
+          manufacturing_pack_path?: string | null
+          tech_sketch_storage_path?: string | null
+        }
+        Update: {
+          id?: string
+          sku_id?: string
+          version_int?: number
+          parameter_snapshot?: Json
+          svg_content?: string
+          dxf_storage_path?: string
+          svg_storage_path?: string
+          diff_summary?: string | null
+          notes?: string | null
+          created_by?: string
+          created_at?: string
+          pattern_ir?: Json | null
+          manufacturing_pack_path?: string | null
+          tech_sketch_storage_path?: string | null
+        }
+      }
       approval_requests: {
         Row: {
           id: string
@@ -324,6 +417,7 @@ export interface Database {
           entity_type: EntityType
           spec_revision_id: string | null
           bom_revision_id: string | null
+          cad_version_id: string | null
           status: ApprovalStatus
           requested_by: string
           requested_at: string
@@ -334,6 +428,7 @@ export interface Database {
           entity_type: EntityType
           spec_revision_id?: string | null
           bom_revision_id?: string | null
+          cad_version_id?: string | null
           status?: ApprovalStatus
           requested_by: string
           requested_at?: string
@@ -344,6 +439,7 @@ export interface Database {
           entity_type?: EntityType
           spec_revision_id?: string | null
           bom_revision_id?: string | null
+          cad_version_id?: string | null
           status?: ApprovalStatus
           requested_by?: string
           requested_at?: string

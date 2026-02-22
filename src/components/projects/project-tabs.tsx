@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DocumentsTab } from '@/components/tabs/documents-tab'
 import { SpecTab } from '@/components/tabs/spec-tab'
 import { BomTab } from '@/components/tabs/bom-tab'
+import { CadTab } from '@/components/tabs/cad-tab'
 import { ApprovalsTab } from '@/components/tabs/approvals-tab'
 import { ExportTab } from '@/components/tabs/export-tab'
 import { AuditTrailTab } from '@/components/tabs/audit-trail-tab'
@@ -11,6 +12,7 @@ import {
   FileText,
   ClipboardList,
   Table2,
+  Ruler,
   CheckCircle2,
   Download,
   History,
@@ -40,6 +42,13 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
         >
           <Table2 className="h-4 w-4 mr-1.5" />
           BOM
+        </TabsTrigger>
+        <TabsTrigger
+          value="cad"
+          className="data-[state=active]:bg-neutral-700 data-[state=active]:text-neutral-100 text-neutral-400 text-sm"
+        >
+          <Ruler className="h-4 w-4 mr-1.5" />
+          CAD
         </TabsTrigger>
         <TabsTrigger
           value="approvals"
@@ -72,6 +81,9 @@ export function ProjectTabs({ projectId }: { projectId: string }) {
       </TabsContent>
       <TabsContent value="bom">
         <BomTab projectId={projectId} />
+      </TabsContent>
+      <TabsContent value="cad">
+        <CadTab projectId={projectId} />
       </TabsContent>
       <TabsContent value="approvals">
         <ApprovalsTab projectId={projectId} />

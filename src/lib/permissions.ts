@@ -29,3 +29,11 @@ export function canExport(role: UserRole): boolean {
 export function canManuallySetStatus(role: UserRole): boolean {
   return role === 'admin' || role === 'member'
 }
+
+export function canGenerateCad(role: UserRole): boolean {
+  return role === 'admin' || role === 'member'
+}
+
+export function canDownloadManufacturingPack(role: UserRole): boolean {
+  return role === 'admin' || role === 'member' || role === 'viewer'
+}

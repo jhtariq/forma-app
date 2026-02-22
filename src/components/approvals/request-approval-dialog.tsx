@@ -75,6 +75,7 @@ export function RequestApprovalDialog({
           entity_type: entityType,
           spec_revision_id: entityType === 'spec' ? revisionId : null,
           bom_revision_id: entityType === 'bom' ? revisionId : null,
+          cad_version_id: entityType === 'cad' ? revisionId : null,
           status: 'pending',
           requested_by: user.id,
         })
