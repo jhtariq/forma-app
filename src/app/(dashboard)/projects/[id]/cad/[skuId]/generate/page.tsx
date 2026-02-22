@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
@@ -41,6 +41,21 @@ import type { TshirtParams } from '@/lib/cad'
 import type { DerivedParams } from '@/lib/cad'
 import type { Json } from '@/lib/types/database'
 import dynamic from 'next/dynamic'
+
+// ─── Advanced field auto-formulas ─────────────────────────────────────────────
+// Keyed by TshirtParams field name. Each returns the derived default value.
+const ADVANCED_FORMULAS: Partial<Record<keyof TshirtParams, (p: TshirtParams) => number>> = {
+  hem_sweep_width_mm:         (p) => p.chest_finished_circumference_mm,
+  bicep_width_mm:             (p) => Math.round(p.chest_finished_circumference_mm * 0.35),
+  sleeve_opening_width_mm:    (p) => Math.round(p.bicep_width_mm * 0.89),
+  drop_shoulder_mm:           ()  => 0,
+  neck_width_mm:              (p) => Math.round(p.shoulder_width_mm * 0.41),
+  neck_depth_back_mm:         (p) => Math.round(p.neck_depth_front_mm * 0.31),
+  neckband_finished_width_mm: ()  => 20,
+  seam_allowance_mm:          ()  => 10,
+  hem_allowance_body_mm:      ()  => 20,
+  hem_allowance_sleeve_mm:    ()  => 20,
+}
 
 // Dynamic import to avoid SSR issues with Three.js
 const TshirtPreview3D = dynamic(
@@ -151,7 +166,22 @@ export default function CadGeneratePage() {
   const [sleeveCapAdjusted, setSleeveCapAdjusted] = useState(false)
   const [sleeveCapAdjustmentMm, setSleeveCapAdjustmentMm] = useState(0)
   const [downloadingPack, setDownloadingPack] = useState(false)
-  const [pocketOpen, setPocketOpen] = useState(false)
+  // Track which collapsible sections are open (keyed by section.section name)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const toggleSection = useCallback((name: string) => {
+    setOpenSections((prev) => ({ ...prev, [name]: !prev[name] }))
+  }, [])
+
+  // Resets all advanced override fields to their auto-computed values
+  const resetAdvancedToAuto = useCallback(() => {
+    setFormParams((prev) => {
+      const updates: Partial<TshirtParams> = {}
+      for (const [key, formula] of Object.entries(ADVANCED_FORMULAS)) {
+        if (formula) (updates as Record<string, number>)[key] = formula(prev)
+      }
+      return { ...prev, ...updates }
+    })
+  }, [])
 
   // Fetch SKU info
   const { data: sku } = useQuery({
@@ -186,7 +216,7 @@ export default function CadGeneratePage() {
       setCurrentVersion(latestVersion.version_int)
       setCurrentVersionId(latestVersion.id)
       if ((latestVersion.parameter_snapshot as TshirtParams).pocket_enabled) {
-        setPocketOpen(true)
+        setOpenSections((prev) => ({ ...prev, Pocket: true }))
       }
     }
   }, [latestVersion])
@@ -347,21 +377,49 @@ export default function CadGeneratePage() {
           {/* Param sections */}
           {CAD_PARAM_SECTIONS.map((section) => {
             if (section.collapsible) {
-              const isOpen = pocketOpen
+              const isOpen = !!openSections[section.section]
               return (
                 <Card key={section.section} className="bg-neutral-900 border-neutral-800">
                   <button
                     type="button"
                     className="w-full flex items-center justify-between px-4 py-3 text-neutral-300 hover:text-neutral-100 text-sm font-medium"
-                    onClick={() => setPocketOpen(!isOpen)}
+                    onClick={() => toggleSection(section.section)}
                   >
-                    {section.section}
+                    <span className="flex items-center gap-2">
+                      {section.section}
+                      {section.advanced && (
+                        <span className="text-[10px] text-neutral-600 font-normal">
+                          auto-computed defaults
+                        </span>
+                      )}
+                    </span>
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </button>
                   {isOpen && (
                     <CardContent className="space-y-3 pt-0">
+                      {section.advanced && (
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-neutral-600 text-[10px]">
+                            Override individual values or reset all to auto.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={resetAdvancedToAuto}
+                            className="text-[10px] text-orange-500 hover:text-orange-400 underline"
+                          >
+                            Reset all to auto
+                          </button>
+                        </div>
+                      )}
                       {section.fields.map((field) => {
                         if (field.conditional && !pocketEnabled) return null
+                        // Compute the auto hint value for advanced fields
+                        const autoVal = section.advanced
+                          ? ADVANCED_FORMULAS[field.key as keyof TshirtParams]?.(formParams)
+                          : undefined
+                        const hint = autoVal !== undefined
+                          ? `Auto: ${autoVal} mm · ${field.advancedHint}`
+                          : undefined
                         return (
                           <FieldRow
                             key={field.key}
@@ -369,6 +427,7 @@ export default function CadGeneratePage() {
                             formParams={formParams}
                             updateParam={updateParam}
                             canEdit={canEdit}
+                            hint={hint}
                           />
                         )
                       })}
@@ -579,11 +638,13 @@ function FieldRow({
   formParams,
   updateParam,
   canEdit,
+  hint,
 }: {
   field: { key: string; label: string; type: string; required: boolean; placeholder?: string; options?: string[] }
   formParams: TshirtParams
   updateParam: (key: string, value: string | number | boolean) => void
   canEdit: boolean
+  hint?: string
 }) {
   const val = (formParams as unknown as Record<string, unknown>)[field.key]
 
@@ -649,6 +710,9 @@ function FieldRow({
             ))}
           </SelectContent>
         </Select>
+      )}
+      {hint && (
+        <p className="text-neutral-600 text-[10px]">{hint}</p>
       )}
     </div>
   )

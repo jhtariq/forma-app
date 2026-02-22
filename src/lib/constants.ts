@@ -102,14 +102,20 @@ export interface CadParamField {
   placeholder?: string
   options?: string[]
   conditional?: string
+  // For advanced fields: human-readable description of the auto formula
+  advancedHint?: string
 }
 
 export interface CadParamSection {
   section: string
   collapsible?: boolean
+  // Marks this as the advanced-overrides section (collapsed by default, shows reset button)
+  advanced?: boolean
   fields: CadParamField[]
 }
 
+// ─── Primary sections (11 required fields the user always fills in) ───────────
+// ─── Advanced section (10 fields with sensible derived defaults) ──────────────
 export const CAD_PARAM_SECTIONS: CadParamSection[] = [
   {
     section: 'Identity',
@@ -130,7 +136,6 @@ export const CAD_PARAM_SECTIONS: CadParamSection[] = [
       { key: 'chest_finished_circumference_mm', label: 'Chest Circumference (mm)', type: 'number', required: true },
       { key: 'body_length_hps_to_hem_mm', label: 'Body Length HPS→Hem (mm)', type: 'number', required: true },
       { key: 'shoulder_width_mm', label: 'Shoulder Width (mm)', type: 'number', required: true },
-      { key: 'hem_sweep_width_mm', label: 'Hem Sweep Width (mm)', type: 'number', required: true },
     ],
   },
   {
@@ -144,9 +149,6 @@ export const CAD_PARAM_SECTIONS: CadParamSection[] = [
         options: ['short', 'long'],
       },
       { key: 'sleeve_length_mm', label: 'Sleeve Length (mm)', type: 'number', required: true },
-      { key: 'bicep_width_mm', label: 'Bicep Width (mm)', type: 'number', required: true },
-      { key: 'sleeve_opening_width_mm', label: 'Sleeve Opening Width (mm)', type: 'number', required: true },
-      { key: 'drop_shoulder_mm', label: 'Drop Shoulder (mm)', type: 'number', required: false },
     ],
   },
   {
@@ -159,25 +161,14 @@ export const CAD_PARAM_SECTIONS: CadParamSection[] = [
         required: true,
         options: ['crew', 'v'],
       },
-      { key: 'neck_width_mm', label: 'Neck Width (mm)', type: 'number', required: true },
       { key: 'neck_depth_front_mm', label: 'Neck Depth Front (mm)', type: 'number', required: true },
-      { key: 'neck_depth_back_mm', label: 'Neck Depth Back (mm)', type: 'number', required: true },
-      { key: 'neckband_finished_width_mm', label: 'Neckband Width (mm)', type: 'number', required: true },
       {
         key: 'fabric_stretch_class',
-        label: 'Fabric Stretch Class',
+        label: 'Fabric Stretch',
         type: 'select',
         required: true,
         options: ['low', 'medium', 'high'],
       },
-    ],
-  },
-  {
-    section: 'Allowances',
-    fields: [
-      { key: 'seam_allowance_mm', label: 'Seam Allowance (mm)', type: 'number', required: true },
-      { key: 'hem_allowance_body_mm', label: 'Hem Allowance Body (mm)', type: 'number', required: true },
-      { key: 'hem_allowance_sleeve_mm', label: 'Hem Allowance Sleeve (mm)', type: 'number', required: true },
     ],
   },
   {
@@ -219,6 +210,83 @@ export const CAD_PARAM_SECTIONS: CadParamSection[] = [
         type: 'number',
         required: false,
         conditional: 'pocket_enabled',
+      },
+    ],
+  },
+  {
+    section: 'Advanced Overrides',
+    collapsible: true,
+    advanced: true,
+    fields: [
+      {
+        key: 'hem_sweep_width_mm',
+        label: 'Hem Sweep Width (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: 'chest circumference',
+      },
+      {
+        key: 'bicep_width_mm',
+        label: 'Bicep Width (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: 'chest × 0.35',
+      },
+      {
+        key: 'sleeve_opening_width_mm',
+        label: 'Sleeve Opening Width (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: 'bicep × 0.89',
+      },
+      {
+        key: 'drop_shoulder_mm',
+        label: 'Drop Shoulder (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: '0 (standard set-in)',
+      },
+      {
+        key: 'neck_width_mm',
+        label: 'Neck Width (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: 'shoulder × 0.41',
+      },
+      {
+        key: 'neck_depth_back_mm',
+        label: 'Neck Depth Back (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: 'front depth × 0.31',
+      },
+      {
+        key: 'neckband_finished_width_mm',
+        label: 'Neckband Width (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: '20 mm standard',
+      },
+      {
+        key: 'seam_allowance_mm',
+        label: 'Seam Allowance (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: '10 mm standard',
+      },
+      {
+        key: 'hem_allowance_body_mm',
+        label: 'Hem Allowance Body (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: '20 mm standard',
+      },
+      {
+        key: 'hem_allowance_sleeve_mm',
+        label: 'Hem Allowance Sleeve (mm)',
+        type: 'number',
+        required: false,
+        advancedHint: '20 mm standard',
       },
     ],
   },

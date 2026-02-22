@@ -1,7 +1,7 @@
 # PAQD Apparel Demo
 ## Product Requirements Document (PRD)
-Version: 1.2
-Date: 2026-02-19
+Version: 1.3
+Date: 2026-02-17
 Scope: Apparel Text to CAD, SKU Tracking, Manufacturer Ready Outputs, Security Baseline
 
 ---
@@ -102,7 +102,9 @@ Structured input parameters are normalized into a canonical parameter object. A 
 
 ## 5.2 Input Parameters
 
-### Required Fields
+The parameter set is split into three tiers: required primary fields the user must always specify, advanced override fields that carry sensible auto-computed defaults, and optional pocket fields that only apply when the pocket is enabled.
+
+### Required Primary Fields (11)
 
 units, mm only for MVP
 size_label, string, for example S, M, L
@@ -110,28 +112,30 @@ fit_profile, slim, regular, relaxed, oversized
 chest_finished_circumference_mm
 body_length_hps_to_hem_mm
 shoulder_width_mm
+sleeve_type, short or long
 sleeve_length_mm
-bicep_width_mm
-sleeve_opening_width_mm
-hem_sweep_width_mm
-
 neckline_type, crew or v
-neck_width_mm
 neck_depth_front_mm
-neck_depth_back_mm
-
-neckband_finished_width_mm
 fabric_stretch_class, low, medium, high
 
-seam_allowance_mm, for main seams
-hem_allowance_body_mm
-hem_allowance_sleeve_mm
+### Advanced Override Fields (10, auto-computed defaults shown)
 
-### Optional Fields
+These fields are pre-filled with deterministic defaults derived from the primary fields. Users may override them in the UI. If left at auto, the generator applies the formula exactly.
 
-sleeve_type, short or long
-drop_shoulder_mm, defaults to 0
-pocket_enabled, boolean
+hem_sweep_width_mm, default: chest_finished_circumference_mm
+bicep_width_mm, default: chest_finished_circumference_mm times 0.35
+sleeve_opening_width_mm, default: bicep_width_mm times 0.89
+drop_shoulder_mm, default: 0
+neck_width_mm, default: shoulder_width_mm times 0.41
+neck_depth_back_mm, default: neck_depth_front_mm times 0.31
+neckband_finished_width_mm, default: 20
+seam_allowance_mm, default: 10
+hem_allowance_body_mm, default: 20
+hem_allowance_sleeve_mm, default: 20
+
+### Optional Pocket Fields
+
+pocket_enabled, boolean, default false
 
 If pocket_enabled is true:
 
@@ -141,15 +145,15 @@ pocket_placement_from_cf_mm
 pocket_placement_from_shoulder_mm
 pocket_corner_radius_mm, optional
 
-### Derived Internal Parameters, Not Directly Edited in Phase 1
+### Derived Internal Parameters, Not User-Editable
 
-These are computed deterministically from the required fields and template defaults:
+These are computed deterministically from the primary and advanced fields and are never exposed as inputs:
 
 armhole_depth_mm
 armhole_curve_template_scale
 sleeve_cap_height_mm
 sleeve_cap_ease_mm, default near 0 for knit
-neckband_length_ratio, derived from stretch class
+neckband_length_ratio, derived from fabric_stretch_class
 
 ## 5.3 Parameter Snapshot
 
