@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
-import { logAuditEvent } from '@/lib/audit'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -23,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import type { EntityType, Json } from '@/lib/types/database'
+import type { EntityType } from '@/lib/types/database'
 
 interface RequestApprovalDialogProps {
   projectId: string
@@ -68,61 +67,30 @@ export function RequestApprovalDialog({
     setSubmitting(true)
 
     try {
-      const { data: request, error: reqError } = await supabase
-        .from('approval_requests')
-        .insert({
-          project_id: projectId,
-          entity_type: entityType,
-          spec_revision_id: entityType === 'spec' ? revisionId : null,
-          bom_revision_id: entityType === 'bom' ? revisionId : null,
-          cad_version_id: entityType === 'cad' ? revisionId : null,
-          status: 'pending',
-          requested_by: user.id,
-        })
-        .select()
-        .single()
-
-      if (reqError) throw reqError
-
-      const { error: assignError } = await supabase
-        .from('approval_assignees')
-        .insert({
-          approval_request_id: request.id,
-          user_id: selectedApprover,
-        })
-
-      if (assignError) throw assignError
-
-      await logAuditEvent(supabase, {
-        project_id: projectId,
-        actor_user_id: user.id,
-        action: 'approval_requested',
-        entity_type: 'approval_request',
-        entity_id: request.id,
-        metadata_json: {
-          entity_type: entityType,
-          version: revisionVersion,
-        } as unknown as Json,
+      const response = await fetch(`/api/projects/${projectId}/approvals/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entityType,
+          revisionId,
+          approverId: selectedApprover,
+        }),
       })
 
-      // Auto-transition project status to "In Review"
-      await supabase
-        .from('projects')
-        .update({ status: 'In Review', updated_at: new Date().toISOString() })
-        .eq('id', projectId)
-        .eq('status', 'Draft')
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to request approval' }))
+        throw new Error(err.error ?? 'Failed to request approval')
+      }
 
       queryClient.invalidateQueries({ queryKey: ['approvals', projectId] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId] })
 
-      toast.success(
-        `Approval requested for ${entityType.toUpperCase()} v${revisionVersion}`
-      )
+      toast.success(`Approval requested for ${entityType.toUpperCase()} v${revisionVersion}`)
       onOpenChange(false)
       setSelectedApprover('')
     } catch (err) {
       console.error(err)
-      toast.error('Failed to request approval')
+      toast.error(err instanceof Error ? err.message : 'Failed to request approval')
     } finally {
       setSubmitting(false)
     }

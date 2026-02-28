@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { AuthContext, type AppUser } from '@/lib/hooks/use-auth'
 
 const DEMO_PASSWORD = 'demo1234'
+const IS_PRODUCTION = process.env.NEXT_PUBLIC_APP_ENV === 'production'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
@@ -85,6 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const switchUser = async (email: string) => {
+    if (IS_PRODUCTION) {
+      console.warn('switchUser is disabled in production')
+      return
+    }
     setLoading(true)
     setUser(null)
     await supabase.auth.signOut()

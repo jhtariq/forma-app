@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
-import { logAuditEvent } from '@/lib/audit'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -40,7 +39,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
     setLoading(true)
 
     try {
-      // Get user's facility
+      // Get user's facility (client-side read, protected by RLS)
       const { data: facilities } = await supabase
         .from('facilities')
         .select('id')
@@ -54,36 +53,23 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
         return
       }
 
-      // Create project
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .insert({
-          org_id: user.org_id,
-          facility_id: facilityId,
+      const response = await fetch('/api/projects/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           name: name.trim(),
           customer: customer.trim(),
-          due_date: dueDate || null,
-          status: 'Draft',
-          created_by: user.id,
-        })
-        .select()
-        .single()
+          facilityId,
+          dueDate: dueDate || undefined,
+        }),
+      })
 
-      if (projectError) throw projectError
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to create project' }))
+        throw new Error(err.error ?? 'Failed to create project')
+      }
 
-      // Create empty spec for this project
-      const { error: specError } = await supabase
-        .from('specs')
-        .insert({ project_id: project.id })
-
-      if (specError) throw specError
-
-      // Create empty bom for this project
-      const { error: bomError } = await supabase
-        .from('boms')
-        .insert({ project_id: project.id })
-
-      if (bomError) throw bomError
+      const { projectId } = await response.json()
 
       await queryClient.invalidateQueries({ queryKey: ['projects'] })
 
@@ -92,10 +78,10 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
       setName('')
       setCustomer('')
       setDueDate('')
-      router.push(`/projects/${project.id}`)
+      router.push(`/projects/${projectId}`)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to create project')
+      toast.error(err instanceof Error ? err.message : 'Failed to create project')
     } finally {
       setLoading(false)
     }

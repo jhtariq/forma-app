@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/rate-limit'
 import {
   generateTshirtPattern,
   renderSvg,
@@ -56,6 +57,12 @@ export async function POST(request: NextRequest) {
     // Permission check
     if (appUser.role !== 'admin' && appUser.role !== 'member') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+    }
+
+    // Rate limit
+    const { limited } = await checkRateLimit(serviceClient, appUser.id, 'heavy')
+    if (limited) {
+      return NextResponse.json({ error: 'Rate limit exceeded. CAD generation is limited to 5 per minute.' }, { status: 429 })
     }
 
     // Validate SKU belongs to project and org

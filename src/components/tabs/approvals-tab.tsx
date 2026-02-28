@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { canApproveReject } from '@/lib/permissions'
-import { logAuditEvent } from '@/lib/audit'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -22,7 +21,6 @@ import {
 } from '@/components/ui/dialog'
 import { STATUS_COLORS } from '@/lib/constants'
 import { CheckCircle2, XCircle, MessageSquare } from 'lucide-react'
-import type { Json } from '@/lib/types/database'
 
 interface ApprovalRequest {
   id: string
@@ -116,69 +114,27 @@ export function ApprovalsTab({ projectId }: { projectId: string }) {
     setSubmitting(true)
 
     try {
-      const { error: decisionError } = await supabase
-        .from('approval_decisions')
-        .insert({
-          approval_request_id: decidingId,
-          user_id: user.id,
-          decision: decisionType,
-          comment: comment.trim() || null,
-        })
-
-      if (decisionError) throw decisionError
-
-      const newStatus = decisionType === 'approve' ? 'approved' : 'rejected'
-      const { error: updateError } = await supabase
-        .from('approval_requests')
-        .update({ status: newStatus })
-        .eq('id', decidingId)
-
-      if (updateError) throw updateError
-
-      await logAuditEvent(supabase, {
-        project_id: projectId,
-        actor_user_id: user.id,
-        action: decisionType === 'approve' ? 'approval_approved' : 'approval_rejected',
-        entity_type: 'approval_request',
-        entity_id: decidingId,
-        metadata_json: {
-          decision: decisionType,
-          comment: comment.trim() || null,
-        } as unknown as Json,
+      const response = await fetch(`/api/approvals/${decidingId}/decide`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: decisionType, comment: comment.trim() || null }),
       })
 
-      // Check if both spec and bom are approved for auto-status
-      if (decisionType === 'approve') {
-        const { data: allApproved } = await supabase
-          .from('approval_requests')
-          .select('entity_type')
-          .eq('project_id', projectId)
-          .eq('status', 'approved')
-
-        const hasSpec = allApproved?.some((a: any) => a.entity_type === 'spec')
-        const hasBom = allApproved?.some((a: any) => a.entity_type === 'bom')
-
-        if (hasSpec && hasBom) {
-          await supabase
-            .from('projects')
-            .update({ status: 'Approved', updated_at: new Date().toISOString() })
-            .eq('id', projectId)
-
-          queryClient.invalidateQueries({ queryKey: ['project', projectId] })
-        }
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to submit decision' }))
+        throw new Error(err.error ?? 'Failed to submit decision')
       }
 
       queryClient.invalidateQueries({ queryKey: ['approvals', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       queryClient.invalidateQueries({ queryKey: ['spec', projectId] })
       queryClient.invalidateQueries({ queryKey: ['bom', projectId] })
 
-      toast.success(
-        decisionType === 'approve' ? 'Approved successfully' : 'Rejected'
-      )
+      toast.success(decisionType === 'approve' ? 'Approved successfully' : 'Rejected')
       setDecidingId(null)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to submit decision')
+      toast.error(err instanceof Error ? err.message : 'Failed to submit decision')
     } finally {
       setSubmitting(false)
     }

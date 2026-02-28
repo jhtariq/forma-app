@@ -4,6 +4,7 @@ import './globals.css'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { Toaster } from '@/components/ui/sonner'
+import { Analytics } from '@vercel/analytics/next'
 
 const inter = Inter({
   variable: '--font-geist-sans',
@@ -29,6 +30,7 @@ export default function RootLayout({
             <Toaster />
           </AuthProvider>
         </QueryProvider>
+        <Analytics />
       </body>
     </html>
   )

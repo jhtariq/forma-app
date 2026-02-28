@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { canEditSpecBom, canRequestApproval } from '@/lib/permissions'
-import { logAuditEvent } from '@/lib/audit'
 import { BOM_CSV_HEADERS } from '@/lib/constants'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -40,8 +39,6 @@ import {
   CheckCircle2,
   Clock,
 } from 'lucide-react'
-import type { Json } from '@/lib/types/database'
-
 interface BomRow {
   line_no: number
   material: string
@@ -171,62 +168,23 @@ export function BomTab({ projectId }: { projectId: string }) {
     setSaving(true)
 
     try {
-      const nextVersion = (bomData.revisions[0]?.version_int ?? 0) + 1
-
-      const { data: revision, error: revError } = await supabase
-        .from('bom_revisions')
-        .insert({
-          bom_id: bomData.bomId,
-          version_int: nextVersion,
-          notes: `Version ${nextVersion}`,
-          created_by: user.id,
-        })
-        .select()
-        .single()
-
-      if (revError) throw revError
-
-      // Insert rows
-      const rowsToInsert = rows
-        .filter((r) => r.material.trim())
-        .map((r) => ({
-          bom_revision_id: revision.id,
-          line_no: r.line_no,
-          material: r.material,
-          supplier: r.supplier,
-          qty: r.qty,
-          unit: r.unit,
-          unit_cost: r.unit_cost,
-          currency: r.currency || null,
-          lead_time_days: r.lead_time_days,
-          notes: r.notes || null,
-        }))
-
-      if (rowsToInsert.length > 0) {
-        const { error: rowsError } = await supabase
-          .from('bom_rows')
-          .insert(rowsToInsert)
-
-        if (rowsError) throw rowsError
-      }
-
-      await logAuditEvent(supabase, {
-        project_id: projectId,
-        actor_user_id: user.id,
-        action: 'bom_revision_created',
-        entity_type: 'bom_revision',
-        entity_id: revision.id,
-        metadata_json: {
-          version: nextVersion,
-          row_count: rowsToInsert.length,
-        } as unknown as Json,
+      const response = await fetch(`/api/projects/${projectId}/bom/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
       })
 
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Save failed' }))
+        throw new Error(err.error ?? 'Failed to save BOM revision')
+      }
+
+      const data = await response.json()
       queryClient.invalidateQueries({ queryKey: ['bom', projectId] })
-      toast.success(`BOM v${nextVersion} saved`)
+      toast.success(`BOM v${data.version} saved`)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to save BOM revision')
+      toast.error(err instanceof Error ? err.message : 'Failed to save BOM revision')
     } finally {
       setSaving(false)
     }

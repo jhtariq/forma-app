@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useQueryClient } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { canManuallySetStatus } from '@/lib/permissions'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +17,6 @@ import {
 import { STATUS_COLORS, PROJECT_STATUSES } from '@/lib/constants'
 import { ArrowLeft, Calendar, Building2, Users } from 'lucide-react'
 import { toast } from 'sonner'
-import type { ProjectStatus } from '@/lib/types/database'
 
 interface ProjectHeaderProps {
   project: {
@@ -34,17 +32,18 @@ interface ProjectHeaderProps {
 
 export function ProjectHeader({ project }: ProjectHeaderProps) {
   const { user } = useAuth()
-  const supabase = createClient()
   const queryClient = useQueryClient()
 
   const handleStatusChange = async (newStatus: string) => {
-    const { error } = await supabase
-      .from('projects')
-      .update({ status: newStatus as ProjectStatus, updated_at: new Date().toISOString() })
-      .eq('id', project.id)
+    const response = await fetch(`/api/projects/${project.id}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
 
-    if (error) {
-      toast.error('Failed to update status')
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Failed to update status' }))
+      toast.error(err.error ?? 'Failed to update status')
       return
     }
 

@@ -17,6 +17,8 @@ import { Badge } from '@/components/ui/badge'
 import { FolderOpen, LogOut, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+const IS_PRODUCTION = process.env.NEXT_PUBLIC_APP_ENV === 'production'
+
 export function Navbar() {
   const { user, signOut } = useAuth()
   const pathname = usePathname()
@@ -58,10 +60,14 @@ export function Navbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Badge variant="outline" className="text-[10px] text-neutral-500 border-neutral-700">
-          DEMO
-        </Badge>
-        <UserSwitcher />
+        {!IS_PRODUCTION && (
+          <>
+            <Badge variant="outline" className="text-[10px] text-neutral-500 border-neutral-700">
+              DEMO
+            </Badge>
+            <UserSwitcher />
+          </>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

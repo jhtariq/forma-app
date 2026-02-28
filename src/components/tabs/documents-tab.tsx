@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { canUploadDocuments } from '@/lib/permissions'
-import { logAuditEvent } from '@/lib/audit'
 import { DOCUMENT_TAGS } from '@/lib/constants'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -63,50 +62,53 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
       setUploading(true)
 
       try {
-        const docId = crypto.randomUUID()
-        const storagePath = `${user.org_id}/${projectId}/${docId}/${file.name}`
+        // Client-side pre-validation for fast UX feedback (mirrors server rules)
+        const MAX_SIZE = 10 * 1024 * 1024
+        if (file.size === 0) {
+          toast.error('File is empty')
+          return
+        }
+        if (file.size > MAX_SIZE) {
+          toast.error(`File too large: max 10 MB (${(file.size / 1024 / 1024).toFixed(1)} MB)`)
+          return
+        }
+        const allowedTypes = [
+          'application/pdf',
+          'image/png',
+          'image/jpeg',
+          'text/csv',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+        ]
+        if (!allowedTypes.includes(file.type)) {
+          toast.error(`File type not allowed: ${file.type}. Use PDF, PNG, JPG, CSV, or XLSX.`)
+          return
+        }
 
-        const { error: uploadError } = await supabase.storage
-          .from('project-documents')
-          .upload(storagePath, file)
+        const formData = new FormData()
+        formData.append('file', file)
 
-        if (uploadError) throw uploadError
-
-        const { data: doc, error: insertError } = await supabase
-          .from('documents')
-          .insert({
-            id: docId,
-            project_id: projectId,
-            filename: file.name,
-            mime_type: file.type,
-            storage_path: storagePath,
-            tags: [],
-            uploaded_by: user.id,
-          })
-          .select()
-          .single()
-
-        if (insertError) throw insertError
-
-        await logAuditEvent(supabase, {
-          project_id: projectId,
-          actor_user_id: user.id,
-          action: 'document_uploaded',
-          entity_type: 'document',
-          entity_id: doc.id,
-          metadata_json: { filename: file.name },
+        const response = await fetch(`/api/projects/${projectId}/documents/upload`, {
+          method: 'POST',
+          body: formData,
+          // No Content-Type header — browser sets it with correct multipart boundary
         })
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: 'Upload failed' }))
+          throw new Error(err.error ?? 'Upload failed')
+        }
 
         queryClient.invalidateQueries({ queryKey: ['documents', projectId] })
         toast.success(`Uploaded ${file.name}`)
       } catch (err) {
         console.error(err)
-        toast.error(`Failed to upload ${file.name}`)
+        toast.error(err instanceof Error ? err.message : `Failed to upload ${file.name}`)
       } finally {
         setUploading(false)
       }
     },
-    [user, supabase, projectId, queryClient]
+    [user, projectId, queryClient]
   )
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,28 +126,28 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
     Array.from(files).forEach(uploadFile)
   }
 
-  const openPreview = async (doc: { storage_path: string; mime_type: string; filename: string }) => {
-    const { data } = await supabase.storage
-      .from('project-documents')
-      .createSignedUrl(doc.storage_path, 3600)
-
-    if (data?.signedUrl) {
-      if (doc.mime_type.startsWith('image/') || doc.mime_type === 'application/pdf') {
-        setPreviewDoc(data.signedUrl)
-      } else {
-        window.open(data.signedUrl, '_blank')
-      }
+  const openPreview = async (doc: { id: string; mime_type: string }) => {
+    const response = await fetch(`/api/projects/${projectId}/documents/${doc.id}/signed-url`)
+    if (!response.ok) {
+      toast.error('Failed to generate preview URL')
+      return
+    }
+    const { url } = await response.json()
+    if (doc.mime_type.startsWith('image/') || doc.mime_type === 'application/pdf') {
+      setPreviewDoc(url)
+    } else {
+      window.open(url, '_blank')
     }
   }
 
-  const handleDownload = async (doc: { storage_path: string; filename: string }) => {
-    const { data } = await supabase.storage
-      .from('project-documents')
-      .createSignedUrl(doc.storage_path, 3600, { download: doc.filename })
-
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, '_blank')
+  const handleDownload = async (doc: { id: string }) => {
+    const response = await fetch(`/api/projects/${projectId}/documents/${doc.id}/signed-url`)
+    if (!response.ok) {
+      toast.error('Failed to generate download URL')
+      return
     }
+    const { url } = await response.json()
+    window.open(url, '_blank')
   }
 
   const startEditDoc = (doc: { id: string; tags: string[]; notes: string | null }) => {
@@ -157,13 +159,15 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
   const saveDocEdit = async () => {
     if (!editingDoc) return
 
-    const { error } = await supabase
-      .from('documents')
-      .update({ tags: editTags, notes: editNotes })
-      .eq('id', editingDoc)
+    const response = await fetch(`/api/projects/${projectId}/documents/${editingDoc}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: editTags, notes: editNotes }),
+    })
 
-    if (error) {
-      toast.error('Failed to update document')
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Failed to update document' }))
+      toast.error(err.error ?? 'Failed to update document')
       return
     }
 
