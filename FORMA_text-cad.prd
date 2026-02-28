@@ -1,7 +1,7 @@
 # PAQD Apparel Demo
 ## Product Requirements Document (PRD)
-Version: 1.3
-Date: 2026-02-17
+Version: 1.4
+Date: 2026-02-22
 Scope: Apparel Text to CAD, SKU Tracking, Manufacturer Ready Outputs, Security Baseline
 
 ---
@@ -346,25 +346,41 @@ INTERNAL
 
 5.8 3D Visual Preview
 
-Phase 1 includes a 3D visual preview intended for silhouette and color only.
+Phase 1 includes a real-time 3D visual preview built as a parametric primitive assembly using
+Three.js / React Three Fiber. The preview updates live as parameters change and is intended for
+silhouette and color verification only, not a fit guarantee.
 
 Requirements:
 
-3D preview updates based on parameters, at minimum chest, body length, shoulder width, sleeve length, neckline type, neck width, neck depth
+3D preview updates based on parameters, at minimum chest, body length, shoulder width, sleeve
+length, sleeve type, neckline type, neck width, neck depth, bicep width, and sleeve opening width.
 
-No cloth simulation is required
+No cloth simulation is required.
 
-Materials can be flat color, optional neckband and pocket color
+Materials use flat color with matte roughness. Body, neckband, and optional pocket each accept
+an independently selectable hex color from the predefined swatch palette.
 
-Seams and pocket outline are shown as simple line overlays
+Geometry approach: parametric primitive assembly representing the garment as it is worn, not
+as flat sewing patterns. Sewing patterns are 2D flattened representations; extruding them
+directly produces unrealistic slabs. The correct approach builds each garment section as its
+3D wearable shape:
 
-Implementation options acceptable for MVP:
+Body: single ExtrudeGeometry from the T-shirt front silhouette profile (shoulders, armhole
+cutout, side seams, neckline) extruded to realistic front-to-back depth. Depth is derived from
+chest circumference, approximately 22 percent, giving a depth proportional to a real garment.
 
-Template mesh morphing driven by parameter values
+Sleeves: CylinderGeometry (truncated cone) oriented horizontally, tapering from bicep radius
+at the shoulder end to sleeve-opening radius at the cuff end. A slight downward droop angle
+of approximately 10 degrees is applied to match natural sleeve hang. Cross-section is slightly
+flattened on the vertical axis (scale approximately 0.6) to represent an arm-shaped oval rather
+than a perfect circle. One cylinder per sleeve side, attached at the armhole position.
 
-Flat lay 3D, pieces arranged in 3D space for visual verification
+Neckband: TorusGeometry with non-uniform X/Y scaling to produce an ellipse matching the neck
+opening dimensions. Positioned on the front face of the body.
 
-The 3D preview is not a fit guarantee, it is a visual aid.
+Pocket: flat PlaneGeometry on the front face of the body, visible only when pocket_enabled.
+
+The preview is not a fit guarantee, it is a visual aid for silhouette and colorway verification.
 
 6. Feature 2, SKU Tracking
 6.1 SKU Object
