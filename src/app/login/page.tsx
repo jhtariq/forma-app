@@ -1,13 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+const IS_PRODUCTION = process.env.NEXT_PUBLIC_APP_ENV === 'production'
 
 const DEMO_ACCOUNTS = [
   { email: 'admin@forma-demo.com', role: 'Admin', name: 'Alice Admin' },
@@ -15,6 +18,17 @@ const DEMO_ACCOUNTS = [
   { email: 'vendor@forma-demo.com', role: 'External', name: 'Vera Vendor' },
   { email: 'viewer@forma-demo.com', role: 'Viewer', name: 'Victor Viewer' },
 ]
+
+// Separated into its own component so useSearchParams can be wrapped in Suspense
+function SessionExpiredToast() {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('reason') === 'session_expired') {
+      toast.warning('Your session has expired. Please sign in again.')
+    }
+  }, [searchParams])
+  return null
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -62,6 +76,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-950 p-4">
+      <Suspense fallback={null}>
+        <SessionExpiredToast />
+      </Suspense>
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-neutral-100">
@@ -119,26 +136,28 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-neutral-900 border-neutral-800">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm text-neutral-300">Quick Demo Login</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((account) => (
-              <Button
-                key={account.email}
-                variant="outline"
-                size="sm"
-                onClick={() => handleDemoLogin(account.email)}
-                disabled={loading}
-                className="border-neutral-700 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"
-              >
-                <span className="truncate">{account.name}</span>
-                <span className="ml-1 text-xs text-neutral-500">({account.role})</span>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
+        {!IS_PRODUCTION && (
+          <Card className="bg-neutral-900 border-neutral-800">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm text-neutral-300">Quick Demo Login</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-2">
+              {DEMO_ACCOUNTS.map((account) => (
+                <Button
+                  key={account.email}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDemoLogin(account.email)}
+                  disabled={loading}
+                  className="border-neutral-700 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"
+                >
+                  <span className="truncate">{account.name}</span>
+                  <span className="ml-1 text-xs text-neutral-500">({account.role})</span>
+                </Button>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

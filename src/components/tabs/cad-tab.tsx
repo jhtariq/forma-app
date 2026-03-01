@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { canGenerateCad, canRequestApproval } from '@/lib/permissions'
-import { logAuditEvent } from '@/lib/audit'
 import { STATUS_COLORS } from '@/lib/constants'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -25,7 +24,6 @@ import {
 import { Label } from '@/components/ui/label'
 import { RequestApprovalDialog } from '@/components/approvals/request-approval-dialog'
 import { Ruler, Plus, ExternalLink, Shield } from 'lucide-react'
-import type { Json } from '@/lib/types/database'
 
 interface SkuRow {
   id: string
@@ -89,37 +87,16 @@ export function CadTab({ projectId }: { projectId: string }) {
     setCreating(true)
 
     try {
-      const { data: project } = await supabase
-        .from('projects')
-        .select('org_id')
-        .eq('id', projectId)
-        .single()
-
-      if (!project) throw new Error('Project not found')
-
-      const { data: sku, error } = await supabase
-        .from('skus')
-        .insert({
-          project_id: projectId,
-          org_id: project.org_id,
-          name: skuName.trim(),
-          garment_type: 'tshirt',
-          status: 'draft',
-          created_by: user.id,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      await logAuditEvent(supabase, {
-        project_id: projectId,
-        actor_user_id: user.id,
-        action: 'sku_created',
-        entity_type: 'sku',
-        entity_id: sku.id,
-        metadata_json: { sku_name: skuName.trim(), garment_type: 'tshirt' } as unknown as Json,
+      const response = await fetch(`/api/projects/${projectId}/skus/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: skuName.trim(), garmentType: 'tshirt' }),
       })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to create SKU' }))
+        throw new Error(err.error ?? 'Failed to create SKU')
+      }
 
       queryClient.invalidateQueries({ queryKey: ['skus', projectId] })
       queryClient.invalidateQueries({ queryKey: ['audit', projectId] })
@@ -128,7 +105,7 @@ export function CadTab({ projectId }: { projectId: string }) {
       setCreateOpen(false)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to create SKU')
+      toast.error(err instanceof Error ? err.message : 'Failed to create SKU')
     } finally {
       setCreating(false)
     }

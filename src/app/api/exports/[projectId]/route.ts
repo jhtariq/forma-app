@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/rate-limit'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import JSZip from 'jszip'
@@ -34,11 +35,23 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Get project
+    // Role check — only admin and member can export
+    if (!['admin', 'member'].includes(appUser.role)) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+    }
+
+    // Rate limit
+    const { limited } = await checkRateLimit(serviceClient, appUser.id, 'heavy')
+    if (limited) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Exports are limited to 5 per minute.' }, { status: 429 })
+    }
+
+    // Get project — must belong to user's org
     const { data: project } = await serviceClient
       .from('projects')
       .select('*, facilities(name)')
       .eq('id', projectId)
+      .eq('org_id', appUser.org_id)
       .single()
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })

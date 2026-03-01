@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/use-auth'
 import { canEditSpecBom, canRequestApproval } from '@/lib/permissions'
-import { logAuditEvent } from '@/lib/audit'
 import { SPEC_FIELD_GROUPS, ALL_SPEC_FIELD_KEYS } from '@/lib/constants'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -31,8 +30,6 @@ import {
   Eye,
   Send,
 } from 'lucide-react'
-import type { Json } from '@/lib/types/database'
-
 interface CustomField {
   key: string
   value: string
@@ -144,43 +141,30 @@ export function SpecTab({ projectId }: { projectId: string }) {
     setSaving(true)
 
     try {
-      const fieldsJson: Record<string, string> = { ...fields }
+      const fields_json: Record<string, string> = { ...fields }
       customFields.forEach((cf) => {
         if (cf.key.trim()) {
-          fieldsJson[cf.key.trim()] = cf.value
+          fields_json[cf.key.trim()] = cf.value
         }
       })
 
-      const nextVersion = (specData.revisions[0]?.version_int ?? 0) + 1
-
-      const { data: revision, error } = await supabase
-        .from('spec_revisions')
-        .insert({
-          spec_id: specData.specId,
-          version_int: nextVersion,
-          fields_json: fieldsJson as unknown as Json,
-          notes: `Version ${nextVersion}`,
-          created_by: user.id,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      await logAuditEvent(supabase, {
-        project_id: projectId,
-        actor_user_id: user.id,
-        action: 'spec_revision_created',
-        entity_type: 'spec_revision',
-        entity_id: revision.id,
-        metadata_json: { version: nextVersion } as unknown as Json,
+      const response = await fetch(`/api/projects/${projectId}/spec/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields_json }),
       })
 
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Save failed' }))
+        throw new Error(err.error ?? 'Failed to save Spec revision')
+      }
+
+      const data = await response.json()
       queryClient.invalidateQueries({ queryKey: ['spec', projectId] })
-      toast.success(`Spec v${nextVersion} saved`)
+      toast.success(`Spec v${data.version} saved`)
     } catch (err) {
       console.error(err)
-      toast.error('Failed to save spec revision')
+      toast.error(err instanceof Error ? err.message : 'Failed to save spec revision')
     } finally {
       setSaving(false)
     }

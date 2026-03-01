@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function GET(
   request: NextRequest,
@@ -31,6 +32,12 @@ export async function GET(
       .single()
     if (!appUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Rate limit
+    const { limited } = await checkRateLimit(serviceClient, appUser.id, 'heavy')
+    if (limited) {
+      return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 })
     }
 
     // Fetch the cad_version (with sku to verify org ownership)

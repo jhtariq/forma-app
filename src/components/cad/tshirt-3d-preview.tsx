@@ -12,70 +12,76 @@ function n(val: unknown, fallback: number): number {
   return Number.isFinite(num) ? num : fallback
 }
 
-const S = 1 / 4   // mm → world units scale
-const DEPTH = 2   // fabric extrude depth (world units)
+const S = 1 / 4       // mm → world units scale
+const DROOP = 0.18    // sleeve droop angle (~10°) — natural sleeve hang
 
-// ─── Full symmetric front/back bodice ────────────────────────────────────────
-// Draws the COMPLETE panel (both left and right halves, symmetric about x=0).
-// Y=0 at hem, Y=H at shoulder/neck line. Mesh is centered vertically at origin.
+// ─── Body (single solid extrusion with realistic front-to-back depth) ────────
+// Uses the front silhouette profile extruded to realistic depth (~22% of chest
+// circumference), giving the shirt a proper 3D boxy presence when rotated.
+// The mesh is centered in Z so the shirt sits at z=0 with equal front/back depth.
 function BodiceMesh({
   params,
-  isBack,
   color,
+  bodyDepth,
 }: {
   params: TshirtParams
-  isBack: boolean
   color: string
+  bodyDepth: number
 }) {
-  const chest    = n(params.chest_finished_circumference_mm, 1040)
-  const bodyLen  = n(params.body_length_hps_to_hem_mm, 700)
-  const shoulder = n(params.shoulder_width_mm, 460)
-  const neckW    = n(params.neck_width_mm, 190)
+  const chest      = n(params.chest_finished_circumference_mm, 1040)
+  const bodyLen    = n(params.body_length_hps_to_hem_mm, 700)
+  const shoulder   = n(params.shoulder_width_mm, 460)
+  const neckW      = n(params.neck_width_mm, 190)
   const neckDFront = n(params.neck_depth_front_mm, 80)
-  const neckDBack  = n(params.neck_depth_back_mm, 25)
   const ds         = n(params.drop_shoulder_mm, 0)
   const hemSweep   = n(params.hem_sweep_width_mm, chest)
 
-  // Half-widths in world units
-  const hw = (chest / 4) * S      // side seam x (= chest/2 total panel width)
-  const hs = (shoulder / 2) * S   // shoulder x
-  const hn = (neckW / 2) * S      // neck opening x
-  const hh = (hemSweep / 4) * S   // hem x
+  const hw = (chest / 4) * S
+  const hs = (shoulder / 2) * S
+  const hn = (neckW / 2) * S
+  const hh = (hemSweep / 4) * S
   const H  = bodyLen * S
-  const nd = (isBack ? neckDBack : neckDFront) * S   // neck depth from top
-  const ah = (shoulder * 0.5 + ds) * S               // armhole depth from top
-  const isV = !isBack && params.neckline_type === 'v'
+  const nd = neckDFront * S
+  const ah = (shoulder * 0.5 + ds) * S
+  const isV = params.neckline_type === 'v'
 
   const geometry = useMemo(() => {
     const shape = new THREE.Shape()
-    // Bottom hem → right side → right neck → [V-neck] → left neck → left side → close
     shape.moveTo(-hh, 0)
     shape.lineTo(hh, 0)
-    shape.lineTo(hw, H - ah)        // right side seam at armhole level
-    shape.lineTo(hs, H - nd)        // right shoulder point
-    shape.lineTo(hn, H)             // right neck corner
-    if (isV) shape.lineTo(0, H - nd) // V-neck centre dip
-    shape.lineTo(-hn, H)            // left neck corner
-    shape.lineTo(-hs, H - nd)       // left shoulder point
-    shape.lineTo(-hw, H - ah)       // left side seam at armhole level
+    shape.lineTo(hw, H - ah)
+    shape.lineTo(hs, H - nd)
+    shape.lineTo(hn, H)
+    if (isV) shape.lineTo(0, H - nd)
+    shape.lineTo(-hn, H)
+    shape.lineTo(-hs, H - nd)
+    shape.lineTo(-hw, H - ah)
     shape.closePath()
 
-    return new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: false })
-  }, [hw, hs, hn, hh, H, nd, ah, isV])
+    return new THREE.ExtrudeGeometry(shape, { depth: bodyDepth, bevelEnabled: false })
+  }, [hw, hs, hn, hh, H, nd, ah, isV, bodyDepth])
 
-  // Back panel sits just behind the front
-  const zPos = isBack ? -(DEPTH + 0.5) : 0
-
+  // ExtrudeGeometry extrudes in +Z from the shape face at z=0.
+  // Positioning at z = -bodyDepth/2 centers the mesh: front face at +bodyDepth/2, back at -bodyDepth/2.
   return (
-    <mesh geometry={geometry} position={[0, -H / 2, zPos]}>
+    <mesh geometry={geometry} position={[0, -H / 2, -bodyDepth / 2]}>
       <meshStandardMaterial color={color} roughness={0.8} metalness={0} />
     </mesh>
   )
 }
 
-// ─── Sleeve mesh ──────────────────────────────────────────────────────────────
-// Trapezoidal sleeve extending HORIZONTALLY from each side of the bodice.
-// The cap edge (bicep-width) aligns with the bodice side seam.
+// ─── Sleeve (CylinderGeometry truncated cone, oriented horizontally) ──────────
+// Each sleeve is a tapered cylinder rotated 90° to point outward from the body
+// with a ~10° natural downward droop.
+//
+// Scale: [1, 1, 0.6]
+//   After rotation.z ≈ π/2, local X → world Y and local Z → world Z.
+//   scale.x=1 keeps full world-Y diameter so the sleeve fills the armhole opening.
+//   scale.z=0.6 compresses world-Z depth so the sleeve stays within the body thickness.
+//
+// Overlap: sleeve extends 15 world units INTO the body so there is no visible seam
+//   at the junction — the body mesh occludes the inner portion and the sleeve
+//   appears to grow organically from the body side.
 function SleeveMesh({
   params,
   side,
@@ -85,59 +91,64 @@ function SleeveMesh({
   side: 'left' | 'right'
   color: string
 }) {
-  const chest    = n(params.chest_finished_circumference_mm, 1040)
-  const shoulder = n(params.shoulder_width_mm, 460)
-  const bodyLen  = n(params.body_length_hps_to_hem_mm, 700)
-  const bicep    = n(params.bicep_width_mm, 360)
-  const opening  = n(params.sleeve_opening_width_mm, 320)
-  const sleevLen = n(params.sleeve_length_mm, 220)
-  const ds       = n(params.drop_shoulder_mm, 0)
+  const chest      = n(params.chest_finished_circumference_mm, 1040)
+  const shoulder   = n(params.shoulder_width_mm, 460)
+  const bodyLen    = n(params.body_length_hps_to_hem_mm, 700)
+  const bicep      = n(params.bicep_width_mm, 360)
+  const opening    = n(params.sleeve_opening_width_mm, 320)
+  const sleevLen   = n(params.sleeve_length_mm, 220)
+  const ds         = n(params.drop_shoulder_mm, 0)
+  const neckDFront = n(params.neck_depth_front_mm, 80)
 
   const hw     = (chest / 4) * S
   const H      = bodyLen * S
   const ah     = (shoulder * 0.5 + ds) * S
-  const bicepS = bicep * S
-  const openS  = opening * S
+  const nd     = neckDFront * S
+  const bicepR = (bicep / 4) * S
+  const cuffR  = (opening / 4) * S
   const lenS   = sleevLen * S
 
-  // Vertically centre the sleeve on the armhole area of the bodice
-  // (armhole spans world-Y from H/2–ah to H/2; midpoint = H/2 – ah/2)
-  const yCentre = H / 2 - ah / 2
+  const geometry = useMemo(
+    () => new THREE.CylinderGeometry(bicepR, cuffR, lenS, 16),
+    [bicepR, cuffR, lenS]
+  )
 
-  const geometry = useMemo(() => {
-    const shape = new THREE.Shape()
+  // rotation.z = π/2 - DROOP makes the right sleeve axis point rightward and
+  // slightly down (natural droop). Left sleeve mirrors with negative angle.
+  const rotZ = side === 'right' ? Math.PI / 2 - DROOP : -(Math.PI / 2 - DROOP)
 
-    if (side === 'right') {
-      // CCW winding — front face toward +Z
-      shape.moveTo(0, -bicepS / 2)       // cap bottom (at bodice edge)
-      shape.lineTo(lenS, -openS / 2)     // cuff bottom
-      shape.lineTo(lenS, openS / 2)      // cuff top
-      shape.lineTo(0, bicepS / 2)        // cap top
-    } else {
-      // Mirror: extends in –X. Reverse winding to keep front face toward +Z.
-      shape.moveTo(0, bicepS / 2)
-      shape.lineTo(-lenS, openS / 2)
-      shape.lineTo(-lenS, -openS / 2)
-      shape.lineTo(0, -bicepS / 2)
-    }
-    shape.closePath()
+  // Extend 25 units into the body so the sleeve merges seamlessly at the junction.
+  // The body mesh occludes the inner portion; only the exterior is visible.
+  const OVERLAP = 25
+  const xPos = side === 'right' ? hw + lenS / 2 - OVERLAP : -(hw + lenS / 2 - OVERLAP)
 
-    return new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: false })
-  }, [side, bicepS, openS, lenS])
-
-  // Attach at the side-seam x-position of the bodice
-  const xPos = side === 'right' ? hw : -hw
+  // Center the sleeve at the true armhole midpoint (between armhole bottom and shoulder point).
+  // Subtract droop offset so the bicep end aligns with the armhole midpoint after rotation.
+  const yCentre = H / 2 - (ah + nd) / 2 - lenS * (Math.sin(DROOP) / 2)
 
   return (
-    <mesh geometry={geometry} position={[xPos, yCentre, 0]}>
+    <mesh
+      geometry={geometry}
+      position={[xPos, yCentre, 0]}
+      rotation={[0, 0, rotZ]}
+      scale={[1, 1, 0.6]}
+    >
       <meshStandardMaterial color={color} roughness={0.8} metalness={0} />
     </mesh>
   )
 }
 
 // ─── Neckband (elliptical torus) ─────────────────────────────────────────────
-// Positioned at the neck opening of the front bodice.
-function NeckbandMesh({ params, color }: { params: TshirtParams; color: string }) {
+// Positioned on the front face of the body (+bodyDepth/2 + small offset).
+function NeckbandMesh({
+  params,
+  color,
+  bodyDepth,
+}: {
+  params: TshirtParams
+  color: string
+  bodyDepth: number
+}) {
   const neckW  = n(params.neck_width_mm, 190)
   const neckDF = n(params.neck_depth_front_mm, 80)
   const nbW    = n(params.neckband_finished_width_mm, 20)
@@ -145,8 +156,8 @@ function NeckbandMesh({ params, color }: { params: TshirtParams; color: string }
 
   const H    = bodyLen * S
   const nd   = neckDF * S
-  const rx   = (neckW / 2) * S          // horizontal radius
-  const ry   = nd * 0.5                  // vertical radius (half of neck depth)
+  const rx   = (neckW / 2) * S
+  const ry   = nd * 0.5
   const tube = Math.max(0.5, nbW * S * 0.8)
   const avgR = (rx + ry) / 2
 
@@ -158,13 +169,16 @@ function NeckbandMesh({ params, color }: { params: TshirtParams; color: string }
     [avgR, tube]
   )
 
-  // Centre of neck opening in world Y: H/2 – nd/2
+  // Neckband center in world Y: H/2 – nd/2 (middle of neck opening)
   const yPos = H / 2 - nd / 2
+
+  // Z: front face of body is at +bodyDepth/2; position neckband just in front
+  const zPos = bodyDepth / 2 + 2
 
   return (
     <mesh
       geometry={geometry}
-      position={[0, yPos, DEPTH / 2]}
+      position={[0, yPos, zPos]}
       scale={[rx / avgR, ry / avgR, 1]}
     >
       <meshStandardMaterial color={color} roughness={0.5} metalness={0} />
@@ -173,7 +187,16 @@ function NeckbandMesh({ params, color }: { params: TshirtParams; color: string }
 }
 
 // ─── Pocket plane ─────────────────────────────────────────────────────────────
-function PocketMesh({ params, color }: { params: TshirtParams; color: string }) {
+// Flat rectangle positioned on the front face of the body.
+function PocketMesh({
+  params,
+  color,
+  bodyDepth,
+}: {
+  params: TshirtParams
+  color: string
+  bodyDepth: number
+}) {
   if (!params.pocket_enabled || !params.pocket_width_mm || !params.pocket_height_mm) return null
 
   const bodyLen = n(params.body_length_hps_to_hem_mm, 700)
@@ -183,12 +206,14 @@ function PocketMesh({ params, color }: { params: TshirtParams; color: string }) 
   const pcf = n(params.pocket_placement_from_cf_mm, 70) * S
   const psh = n(params.pocket_placement_from_shoulder_mm, 130) * S
 
-  // Pocket centre: pcf from centre-front (x), psh down from shoulder (y)
   const px = pcf
   const py = H / 2 - psh
 
+  // Z: sit on the front face of the body
+  const zPos = bodyDepth / 2 + 2
+
   return (
-    <mesh position={[px, py, DEPTH + 0.2]}>
+    <mesh position={[px, py, zPos]}>
       <planeGeometry args={[pw, ph]} />
       <meshStandardMaterial color={color} roughness={0.9} />
     </mesh>
@@ -198,6 +223,11 @@ function PocketMesh({ params, color }: { params: TshirtParams; color: string }) 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 function TshirtScene({ params }: { params: TshirtParams }) {
   const groupRef = useRef<THREE.Group>(null)
+
+  // Body depth ≈ 12% of chest circumference — visible 3D presence without looking like a brick.
+  // For M (chest=1040mm): 1040 * 0.12 * 0.25 ≈ 31 world units.
+  const chest     = n(params.chest_finished_circumference_mm, 1040)
+  const bodyDepth = Math.max(12, Math.round(chest * 0.12 * S))
 
   useFrame((_, delta) => {
     if (groupRef.current) groupRef.current.rotation.y += delta * 0.1
@@ -209,12 +239,13 @@ function TshirtScene({ params }: { params: TshirtParams }) {
 
   return (
     <group ref={groupRef}>
-      <BodiceMesh params={params} isBack={false} color={bodyColor} />
-      <BodiceMesh params={params} isBack={true}  color={bodyColor} />
-      <SleeveMesh params={params} side="left"    color={bodyColor} />
-      <SleeveMesh params={params} side="right"   color={bodyColor} />
-      <NeckbandMesh params={params} color={neckColor} />
-      {params.pocket_enabled && <PocketMesh params={params} color={pocketColor} />}
+      <BodiceMesh params={params} color={bodyColor} bodyDepth={bodyDepth} />
+      <SleeveMesh params={params} side="left"  color={bodyColor} />
+      <SleeveMesh params={params} side="right" color={bodyColor} />
+      <NeckbandMesh params={params} color={neckColor} bodyDepth={bodyDepth} />
+      {params.pocket_enabled && (
+        <PocketMesh params={params} color={pocketColor} bodyDepth={bodyDepth} />
+      )}
     </group>
   )
 }
