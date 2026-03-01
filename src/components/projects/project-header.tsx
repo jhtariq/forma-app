@@ -17,6 +17,7 @@ import {
 import { STATUS_COLORS, PROJECT_STATUSES } from '@/lib/constants'
 import { ArrowLeft, Calendar, Building2, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { ProjectMembersPanel } from '@/components/projects/project-members-panel'
 
 interface ProjectHeaderProps {
   project: {
@@ -83,6 +84,9 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
                 Due {format(new Date(project.due_date), 'MMM d, yyyy')}
               </span>
             )}
+          </div>
+          <div className="mt-3">
+            <ProjectMembersPanel projectId={project.id} />
           </div>
         </div>
 

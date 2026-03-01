@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
@@ -21,17 +21,23 @@ import { Label } from '@/components/ui/label'
 interface CreateProjectDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  defaultCustomer?: string
 }
 
-export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogProps) {
+export function CreateProjectDialog({ open, onOpenChange, defaultCustomer }: CreateProjectDialogProps) {
   const { user } = useAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
-  const [customer, setCustomer] = useState('')
+  const [customer, setCustomer] = useState(defaultCustomer ?? '')
   const [dueDate, setDueDate] = useState('')
+
+  // Sync customer field when dialog opens with a defaultCustomer
+  useEffect(() => {
+    if (open) setCustomer(defaultCustomer ?? '')
+  }, [open, defaultCustomer])
 
   const handleCreate = async () => {
     if (!user || !name.trim()) return
@@ -113,7 +119,8 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
               value={customer}
               onChange={(e) => setCustomer(e.target.value)}
               placeholder="e.g. Acme Corp"
-              className="bg-neutral-800 border-neutral-700 text-neutral-100"
+              readOnly={!!defaultCustomer}
+              className={`bg-neutral-800 border-neutral-700 text-neutral-100 ${defaultCustomer ? 'opacity-60 cursor-default' : ''}`}
             />
           </div>
           <div className="space-y-2">
