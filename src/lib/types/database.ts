@@ -24,6 +24,8 @@ export type AuditAction =
   | 'cad_version_generated'
   | 'cad_pushed_to_documents'
   | 'manufacturing_pack_downloaded'
+  | 'project_created'
+  | 'email_intake'
 
 export type DocumentTag = 'Spec' | 'BOM' | 'QC' | 'Compliance' | 'Shipping' | 'Other'
 

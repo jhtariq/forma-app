@@ -15,6 +15,8 @@ import {
   Ruler,
   FolderInput,
   Package,
+  FolderPlus,
+  Mail,
 } from 'lucide-react'
 import type { AuditAction } from '@/lib/types/database'
 
@@ -76,6 +78,16 @@ const ACTION_CONFIG: Record<
     icon: <Package className="h-4 w-4" />,
     label: 'Manufacturing pack downloaded',
     color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
+  },
+  project_created: {
+    icon: <FolderPlus className="h-4 w-4" />,
+    label: 'Project created',
+    color: 'text-violet-400 bg-violet-400/10 border-violet-400/30',
+  },
+  email_intake: {
+    icon: <Mail className="h-4 w-4" />,
+    label: 'Agentic email intake',
+    color: 'text-pink-400 bg-pink-400/10 border-pink-400/30',
   },
 }
 
