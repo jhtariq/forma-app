@@ -12,7 +12,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'FORMA - Manufacturing Source of Truth',
+  title: 'PAQD - Manufacturing Source of Truth',
   description: 'Turn messy manufacturing documents into structured Specs, BOMs, and audit-ready export packs.',
 }
 

@@ -39,7 +39,7 @@ export function Navbar() {
           href="/projects"
           className="text-lg font-bold tracking-tight text-orange-500"
         >
-          FORMA
+          PAQD
         </Link>
 
         <div className="flex items-center gap-1">
