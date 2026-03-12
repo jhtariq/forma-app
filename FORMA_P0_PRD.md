@@ -255,18 +255,38 @@ Approval behaviors
 
 ### Projects list
 
-1. Table list columns  
-   1. project name  
-   2. customer  
-   3. status  
-   4. due date  
-   5. last updated
-2. Create Project button
-3. Optional search and filter
+Two-level navigation built around a company folder view.
+
+Level 1 — Company grid (default, no customer filter in URL)
+1. Landing page renders a grid of company folder cards, one card per unique customer name across all projects the user can see
+2. Each card shows
+   1. company name
+   2. total project count
+   3. status summary badges, counts of each distinct status
+   4. name of the most recently updated project
+3. Cards link to Level 2 by appending ?customer=\<name\> to the URL
+4. Create Project button at top right; opens create dialog with customer field empty
+5. External users see only companies that have at least one project they are assigned to
+
+Level 2 — Company project list (?customer=\<name\>)
+1. Breadcrumb row: Back to Companies link + company name heading
+2. Filtered project table showing only projects for that customer
+   1. project name
+   2. status
+   3. due date
+   4. last updated
+3. Create Project button at top right; opens create dialog with customer field pre-filled and locked to the current company name
 
 ### Project detail
 
-Header shows project name, customer, facility, status, due date
+Header shows project name, customer, facility, status, due date, and vendor access panel
+
+Vendor access panel (in header, below metadata row)
+1. Shows a compact row of chips, one chip per assigned External user
+2. Visible to admins at all times; visible to other roles only when at least one vendor is assigned
+3. Admin can remove a vendor by clicking the × on their chip
+4. Admin can click Add vendor to open an inline dialog listing all External accounts in the org not yet assigned to this project; clicking an entry assigns them
+5. Add and remove actions call the project members API and invalidate the members cache
 
 Tabs
 1. Documents
@@ -360,9 +380,11 @@ Tabs
 
 ### Data access pattern
 
-1. Frontend uses Supabase JS client with the anon key for reads and most writes, protected by RLS
-2. Next.js API routes (Route Handlers) used only for export generation and any multi-step server-side operations
+1. Frontend uses Supabase JS client with the anon key for reads only, protected by RLS
+2. All mutations (create, update, approve, upload) go through Next.js API routes (Route Handlers); no writes are made directly from the browser to Supabase
 3. Supabase service role key used only in server-side routes, never exposed to the browser
+4. org_id is never accepted from the client; it is always sourced server-side from the authenticated session
+5. Every API route enforces: authentication check, role check, rate limit, and org ownership check before any database write
 
 ### Export generation stack
 
@@ -592,7 +614,7 @@ A user can read only rows within their org_id.
 ### Project access
 
 Admin and Member can access all projects in the org.
-External can access only assigned projects via project_members.
+External can access only assigned projects via project_members. Enforced at the database level via a SECURITY DEFINER RLS helper function is_project_member() in migration 004_external_project_rls.sql. The helper avoids the circular dependency that would arise if the projects policy directly queried project_members (which itself has a policy that queries projects).
 Viewer can access all projects read only.
 
 ### Write rules, enforced in application code
@@ -611,7 +633,7 @@ Viewer can access all projects read only.
 
 ## 11. API surface
 
-This section defines the minimal API contract. The implementation may be direct Supabase calls from the client plus one server route for export generation.
+All mutations are handled by Next.js Route Handlers. The browser only makes GET reads to Supabase (protected by RLS). Every route below enforces auth, role, rate limit, and org ownership.
 
 ### Auth
 
@@ -619,56 +641,72 @@ This section defines the minimal API contract. The implementation may be direct 
 2. Logout, Supabase Auth
 3. Password reset optional
 
-### Suggested REST endpoints for Next.js API routes
+### Implemented API routes
+
+Rate limit tiers
+- heavy: 5 requests per minute per user (CAD generation, export, manufacturing pack)
+- write: 30 requests per minute per user (all other mutations)
 
 Projects
-1. GET /projects
-2. POST /projects
-3. GET /projects/{id}
+1. POST /api/projects/create — create project + empty spec + empty bom; org_id sourced from server session only
+2. POST /api/projects/[id]/status — update project status; blocks setting Approved or Exported directly (system-set only)
+
+Project members
+1. GET /api/projects/[id]/members — list all project members with user details (name, email, role); accessible to any authenticated org member
+2. POST /api/projects/[id]/members — assign an External user to the project; admin only; body: { userId }; validates target is same org and has external role; rejects if already a member; logs member_added audit event
+3. DELETE /api/projects/[id]/members/[userId] — remove an External user from the project; admin only; validates membership exists; logs member_removed audit event
 
 Documents
-1. POST /projects/{id}/documents
-2. GET /projects/{id}/documents
+1. POST /api/projects/[id]/documents/upload — upload file to Supabase Storage; validates type and size server-side
+2. POST /api/projects/[id]/documents/[docId]/update — update document tags and notes
+3. GET /api/projects/[id]/documents/[docId]/signed-url — generate a 1-hour signed storage URL; client never calls Supabase Storage directly
 
 Spec
-1. GET /projects/{id}/spec
-2. POST /spec/{specId}/revisions
+1. POST /api/projects/[id]/spec/save — create a new spec_revision with incremented version_int; logs audit event
 
 BOM
-1. GET /projects/{id}/bom
-2. POST /bom/{bomId}/revisions
-3. POST /bom/{bomId}/import_csv
+1. POST /api/projects/[id]/bom/save — create a new bom_revision and insert bom_rows; logs audit event
 
 Approvals
-1. POST /approvals
-2. POST /approvals/{id}/decision
+1. POST /api/projects/[id]/approvals/request — create approval_request + approval_assignee; validates approverId is org member and not self; validates revisionId belongs to this project; auto-sets project status to In Review if Draft
+2. POST /api/approvals/[approvalId]/decide — insert approval_decision; enforces caller is assigned approver; reject requires comment; auto-sets project status to Approved when both spec and bom have approved revisions
+
+SKUs (Pattern CAD)
+1. POST /api/projects/[id]/skus/create — create SKU record
+2. POST /api/cad/generate — generate pattern CAD (heavy rate limit: 5/min)
+3. GET /api/cad/[versionId]/manufacturing-pack — download manufacturing pack ZIP (heavy rate limit: 5/min)
 
 Exports
-1. POST /projects/{id}/exports
-2. GET /projects/{id}/exports
+1. POST /api/exports/[projectId] — generate export ZIP with Summary PDF; uses latest approved spec and bom by default; role check (admin/member only); heavy rate limit: 5/min; org ownership enforced
 
-Audit
-1. GET /projects/{id}/audit
+### Key endpoint behavior details
 
-### Minimal endpoint behavior details
+POST /api/projects/create
+Creates a project, and also creates empty specs and boms records for the project so the tabs always work. org_id is set from the authenticated server session and is never trusted from the request body.
 
-POST /projects  
-Creates a project, and also creates empty specs and boms records for the project so the tabs always work.
+POST /api/projects/[id]/spec/save
+Creates a new spec_revisions row with version_int incremented. Logs audit_events with action spec_revision_created.
 
-POST /spec/{specId}/revisions  
-Creates a new spec_revisions row with version_int incremented. Also inserts audit_events with action spec_revision_created.
+POST /api/projects/[id]/bom/save
+Creates a new bom_revisions row and inserts bom_rows for that revision. Logs audit_events with action bom_revision_created.
 
-POST /bom/{bomId}/revisions  
-Creates a new bom_revisions row, and inserts bom_rows for that revision. Also inserts audit_events with action bom_revision_created.
+POST /api/projects/[id]/approvals/request
+Creates approval_requests for a specific revision, creates approval_assignees, logs audit_events with action approval_requested. Validates the revisionId belongs to this project to prevent cross-project spoofing.
 
-POST /approvals  
-Creates approval_requests for a specific revision, creates approval_assignees, inserts audit_events with action approval_requested.
+POST /api/approvals/[approvalId]/decide
+Inserts approval_decisions, sets approval_requests.status, enforces reject comment, verifies caller is an assigned approver. Logs audit_events with action approval_approved or approval_rejected. Auto-promotes project to Approved when both spec and bom approvals exist.
 
-POST /approvals/{id}/decision  
-Inserts approval_decisions, sets approval_requests.status, enforces reject comment. Inserts audit_events with action approval_approved or approval_rejected.
+POST /api/exports/[projectId]
+Default behavior uses latest approved spec and bom. Generates a ZIP containing Summary.pdf plus attached documents. Writes file to Storage, creates export_packs record, logs audit_events with action export_generated. Org ownership enforced; returns 404 if project UUID belongs to a different org.
 
-POST /projects/{id}/exports  
-Default behavior is use latest approved spec and bom. Generates a ZIP or PDF. Writes file to Storage, creates export_packs record, inserts audit_events with action export_generated.
+GET /api/projects/[id]/members
+Returns the array of project_members rows joined with app_users (id, name, email, role) for the given project. Verifies the requesting user belongs to the same org as the project before returning data.
+
+POST /api/projects/[id]/members
+Adds a project_members row linking the target user to the project. Enforces: caller is admin, target userId is in same org, target has role external, target is not already a member. Logs audit_events with action member_added.
+
+DELETE /api/projects/[id]/members/[userId]
+Removes the project_members row for the given user. Enforces: caller is admin, project belongs to same org, membership exists. Logs audit_events with action member_removed.
 
 ## 12. Export pack specification
 
@@ -702,7 +740,7 @@ Reliability
 No silent data loss. Revisions and audit events must be durable.
 
 Security
-Use Supabase Auth. Enforce access using RLS. Do not place service role keys in the browser.
+Use Supabase Auth. Enforce org isolation using RLS on all reads. All writes go through server-side API routes that enforce auth, role checks, org ownership, and rate limiting. Service role key never exposed to the browser. org_id never accepted from the client. Rate limits applied per user: 5/min for heavy operations, 30/min for standard writes.
 
 Responsiveness
 Desktop only, optimized for 1280px+ viewport. No mobile or tablet layouts in P0.
